@@ -137,14 +137,15 @@
 <button id="play" hidden><span>▶ Дыбыспен ойнату</span></button>
 <audio id="audio" src="audio/soundtrack.wav" preload="auto"></audio>
 
+<script src="audio/timings.js"></script>
 <script>
 /*
  * The animation is a pure function of time: render(t), t in seconds (0..15).
  * Preview: plays in a loop, synced to the soundtrack after "play" is pressed.
  * Export: render.mjs calls window.renderFrame(t) once per frame.
  *
- * Voice lines (see audio/make_audio.py) start at 0.9 s, 5.6 s and 9.8 s;
- * word appearance times below follow the measured word timings of the voice.
+ * Text timing follows the voice: audio/timings.js (written by audio/make_audio.py)
+ * holds when every spoken word starts, and each word appears just before it is heard.
  */
 const DURATION = 15;
 const CUT1 = 5.0, CUT2 = 9.2;          // moments the transition panels fully cover the screen
@@ -181,7 +182,10 @@ const s3words = [];
     m.appendChild(inner); $(id).appendChild(m); s3words.push(inner);
   }));
 // Start times of each word in scene 3 (≈ when the voice says it)
-const S3_TIMES = [9.65, 10.45, 11.7, 12.2, 12.85, 13.3];
+const V = window.VOICE_TIMINGS;
+const LEAD = 0.12;                       // show a word slightly before it is spoken
+const W = (line, i) => V[line].words[i].t - LEAD;
+const S3_TIMES = V[3].words.map((w) => w.t - LEAD);
 
 const rays = $('rays');
 for (let i = 0; i < 12; i++) {
@@ -258,41 +262,42 @@ function render(t) {
   $('s2').style.visibility = t >= CUT1 && t < CUT2 ? 'visible' : 'hidden';
   $('s3').style.visibility = t >= CUT2 ? 'visible' : 'hidden';
 
-  // ---- Scene 1: «Сәлем! Менің есімім Ернұр» (voice 0.9 s) ----
+  // ---- Scene 1: «Сәлем! Менің есімім Ернұр» ----
   s1letters.forEach((c, i) => {
-    const k = prog(t, 0.75 + i * 0.08, 0.7), e = easeOutBack(k);
-    const wave = t > 1.9 ? Math.sin((t - 1.9) * 4 - i * 0.6) * 9 * clamp((t - 1.9) * 2) : 0;
+    const k = prog(t, V[0].words[0].t - 0.2 + i * 0.08, 0.7), e = easeOutBack(k);
+    const ws = V[0].end + 0.3;
+    const wave = t > ws ? Math.sin((t - ws) * 4 - i * 0.6) * 9 * clamp((t - ws) * 2) : 0;
     c.style.opacity = easeOutCubic(clamp(k * 1.6));
     c.style.filter = `blur(${(1 - easeOutCubic(k)) * 18}px)`;
     c.style.transform = `translateY(${(1 - e) * 140 + wave}px) rotate(${(1 - easeOutCubic(k)) * (i % 2 ? 18 : -18)}deg) scale(${0.4 + 0.6 * e})`;
   });
-  s1words.forEach((w, i) => rise(w, t, 1.85 + i * 0.25));
-  const nk = prog(t, 2.6, 0.9);
+  s1words.forEach((w, i) => rise(w, t, W(1, i)));
+  const nk = prog(t, W(1, 2), 0.9);
   const name = $('name');
   name.style.opacity = easeOutCubic(clamp(nk * 2));
   name.style.filter = `blur(${(1 - easeOutCubic(nk)) * 20}px)`;
-  name.style.transform = `scale(${0.3 + 0.7 * easeOutElastic(nk)}) scale(${1 + 0.08 * pulse(t, 3.6, 0.15)})`;
+  name.style.transform = `scale(${0.3 + 0.7 * easeOutElastic(nk)}) scale(${1 + 0.08 * pulse(t, V[1].end, 0.15)})`;
   name.style.backgroundPosition = `${(t * 40) % 200}% 0`;
-  $('nameLine').style.transform = `scaleX(${easeInOutCubic(prog(t, 3.2, 0.7))})`;
+  $('nameLine').style.transform = `scaleX(${easeInOutCubic(prog(t, W(1, 2) + 0.35, 0.7))})`;
   exitScene($('s1'), t, CUT1);
 
-  // ---- Scene 2: «Мен 18 жастамын» (voice 5.6 s) ----
-  rise($('s2a').firstChild, t, 5.35);
-  // "18" counts up 0 → 18 while the voice says «он сегіз»
-  const ck = prog(t, 5.75, 1.0);
+  // ---- Scene 2: «Мен 18 жастамын» ----
+  rise($('s2a').firstChild, t, W(2, 0));
+  // "18" counts up 0 → 18 while «он сегіз» is spoken
+  const ck = prog(t, W(2, 1), V[2].words[3].t - V[2].words[1].t);
   const age = $('age');
   age.textContent = String(Math.round(easeOutCubic(ck) * 18));
   age.style.opacity = easeOutCubic(clamp(ck * 3));
   age.style.filter = `blur(${(1 - easeOutCubic(clamp(ck * 1.5))) * 18}px)`;
-  age.style.transform = `scale(${0.5 + 0.5 * easeOutBack(clamp(ck * 1.2))}) scale(${1 + 0.1 * pulse(t, 6.85, 0.12)})`;
+  age.style.transform = `scale(${0.5 + 0.5 * easeOutBack(clamp(ck * 1.2))}) scale(${1 + 0.1 * pulse(t, V[2].words[3].t, 0.12)})`;
   age.style.backgroundPosition = `${(t * 40) % 200}% 0`;
-  $('arc').setAttribute('stroke-dashoffset', 1885 * (1 - easeInOutCubic(prog(t, 5.6, 1.4))));
+  $('arc').setAttribute('stroke-dashoffset', 1885 * (1 - easeInOutCubic(prog(t, V[2].start, V[2].end - V[2].start))));
   $('ring').style.transform = `rotate(${t * 15}deg) scale(${0.8 + 0.16 * easeOutCubic(prog(t, 5.2, 0.8))})`;
   $('ring').style.opacity = easeOutCubic(prog(t, 5.2, 0.6));
-  rise($('s2c').firstChild, t, 6.75, 120);
+  rise($('s2c').firstChild, t, W(2, 3), 120);
   exitScene($('s2'), t, CUT2);
 
-  // ---- Scene 3: «Жасанды интеллектпен жұмыс істеуді үйреніп жүрмін» (voice 9.8 s) ----
+  // ---- Scene 3: «Жасанды интеллектпен жұмыс істеуді үйреніп жүрмін» ----
   s3words.forEach((w, i) => {
     const k = prog(t, S3_TIMES[i], 0.65), e = easeOutCubic(k);
     w.style.transform = `translateY(${(1 - e) * 115}%) rotate(${(1 - e) * 6}deg)`;
