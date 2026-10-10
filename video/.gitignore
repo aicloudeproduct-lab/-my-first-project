@@ -1,3 +1,4 @@
 node_modules
 audio/_tmp
 audio/models
+__pycache__
