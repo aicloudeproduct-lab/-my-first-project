@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launch video</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  /* Palette, font and logo come from the project's own videos (salem-claude.html, ernur.html) */
+  :root {
+    --bg-1: #1a0f0a;
+    --bg-2: #2b140b;
+    --accent: #d97757;
+    --accent-2: #f2a679;
+    --deep: #3a1a0e;
+    --text: #fbf3ec;
+    --muted: #e9cdb9;
+    --red: #ff3b30;          /* hook word only */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: "Inter Display", "Inter", system-ui, sans-serif; }
+
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; flex: none; background: #000; transform-origin: center; }
+  .scene { position: absolute; inset: 0; visibility: hidden; }
+  .bg { position: absolute; inset: 0; background: radial-gradient(120% 80% at 50% 40%, var(--bg-2) 0%, var(--bg-1) 55%, #0c0705 100%); }
+  .center { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; }
+  .grad {
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 50%, var(--accent) 100%);
+    background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .kicker { font-size: 30px; font-weight: 700; letter-spacing: 8px; color: var(--accent); }
+
+  /* ambient layer shared by scenes 2–5 */
+  #ambient { position: absolute; inset: 0; opacity: 0; }
+  .glow { position: absolute; border-radius: 50%; filter: blur(120px); }
+  #glowA { width: 900px; height: 900px; background: #d97757; left: -250px; top: 250px; opacity: .3; }
+  #glowB { width: 800px; height: 800px; background: #a8452a; right: -300px; bottom: 200px; opacity: .25; }
+  .p { position: absolute; border-radius: 50%; background: var(--accent-2); }
+
+  /* ---------- Scene 1: hook ---------- */
+  #s1 { background: #000; }
+  #s1 .center { color: var(--text); font-weight: 800; }
+  #h1, #h2, #h4 { font-size: 96px; letter-spacing: -2px; }
+  #h1 { top: 640px; } #h2 { top: 760px; } #h4 { top: 1130px; }
+  #h3 { top: 880px; font-size: 200px !important; font-weight: 900 !important; letter-spacing: -6px; }
+
+  /* ---------- Scene 2: home page ---------- */
+  #win {
+    position: absolute; left: 60px; top: 230px; width: 960px; height: 1420px; border-radius: 40px; overflow: hidden;
+    background: radial-gradient(110% 70% at 50% 20%, #2b140b 0%, #1a0f0a 60%, #120a06 100%);
+    border: 2px solid rgba(251, 243, 236, .12); box-shadow: 0 60px 140px rgba(0,0,0,.6);
+  }
+  #bar { height: 76px; display: flex; align-items: center; gap: 14px; padding: 0 28px; background: rgba(0,0,0,.35); border-bottom: 1px solid rgba(251,243,236,.08); }
+  #bar i { width: 18px; height: 18px; border-radius: 50%; display: block; }
+  #url { margin-left: 18px; flex: 1; height: 44px; border-radius: 22px; background: rgba(251,243,236,.07); color: var(--muted);
+         font: 500 21px "Inter", sans-serif; display: flex; align-items: center; padding: 0 22px; white-space: nowrap; overflow: hidden; }
+  #page { position: relative; padding: 40px 56px; color: var(--text); }
+  #nav { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 800; }
+  #nav .links { margin-left: auto; display: flex; gap: 30px; font-size: 23px; font-weight: 600; color: var(--muted); }
+  #badge { display: inline-block; margin-top: 70px; padding: 10px 22px; border-radius: 999px; border: 2px solid rgba(217,119,87,.6);
+           color: var(--accent-2); font-size: 23px; font-weight: 700; }
+  #headline { margin-top: 30px; font-size: 76px; line-height: 1.04; font-weight: 900; letter-spacing: -2.5px; }
+  #sub { margin-top: 28px; font-size: 30px; line-height: 1.4; color: var(--muted); font-weight: 500; }
+  #ctaRow { margin-top: 44px; display: flex; gap: 20px; }
+  .btn { position: relative; overflow: hidden; height: 96px; padding: 0 44px; border-radius: 48px; display: inline-flex; align-items: center; gap: 14px;
+         font-size: 34px; font-weight: 800; }
+  #go { background: var(--accent); color: #1a0f0a; box-shadow: 0 16px 40px rgba(217,119,87,.35); }
+  #go .ripple { position: absolute; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.55); transform: scale(0); }
+  #gh { border: 2px solid rgba(251,243,236,.25); color: var(--text); }
+  #phones { position: relative; height: 560px; margin-top: 56px; }
+  .phone { position: absolute; width: 270px; height: 480px; border-radius: 34px; overflow: hidden; border: 6px solid #2a1810;
+           background: #0c0705 center / cover no-repeat; box-shadow: 0 30px 70px rgba(0,0,0,.55); }
+  #toast { position: absolute; left: 50%; top: 600px; transform: translateX(-50%); padding: 18px 30px; border-radius: 22px;
+           background: #fbf3ec; color: #1a0f0a; font-size: 28px; font-weight: 800; white-space: nowrap; opacity: 0;
+           box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+  #cursor { position: absolute; left: 0; top: 0; width: 76px; height: 76px; transform-origin: 8px 6px; }
+  #flood { position: absolute; inset: 0; background: var(--accent); opacity: 0; }
+
+  /* ---------- Scene 3: features ---------- */
+  #s3h1 { top: 270px; }
+  #s3h2 { top: 330px; font-size: 74px; font-weight: 900; letter-spacing: -2px; color: var(--text); }
+  .card { position: absolute; left: 80px; width: 920px; height: 220px; border-radius: 36px; display: flex; align-items: center; gap: 36px; padding: 0 40px;
+          background: rgba(251,243,236,.06); border: 2px solid rgba(251,243,236,.10); color: var(--text); }
+  .card .ic { flex: none; width: 130px; height: 130px; border-radius: 34px; display: grid; place-items: center;
+              background: linear-gradient(145deg, var(--accent-2), var(--accent)); }
+  .card .ic svg { width: 70px; height: 70px; stroke: #1a0f0a; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .card b { display: block; font-size: 50px; font-weight: 800; letter-spacing: -1px; }
+  .card span { display: block; margin-top: 8px; font-size: 30px; color: var(--muted); font-weight: 500; }
+  #s3flash { position: absolute; inset: 0; background: var(--accent); opacity: 0; }
+
+  /* ---------- Scene 4: close-up on word sync ---------- */
+  #s4 .bg { background: radial-gradient(90% 60% at 50% 45%, #2b140b 0%, #140b07 70%, #090504 100%); }
+  #cam4 { position: absolute; inset: 0; transform-origin: 540px 1000px; }
+  #s4h1 { top: 250px; }
+  #s4h2 { top: 310px; font-size: 76px; font-weight: 900; letter-spacing: -2px; color: var(--text); }
+  #bigword { top: 560px; height: 220px; font-size: 150px; font-weight: 900; letter-spacing: -4px; }
+  #panel { position: absolute; left: 60px; top: 860px; width: 960px; height: 420px; border-radius: 40px;
+           background: rgba(251,243,236,.05); border: 2px solid rgba(251,243,236,.1); }
+  #bars { position: absolute; left: 40px; right: 40px; top: 50px; height: 280px; }
+  .b { position: absolute; bottom: 50%; width: 9px; border-radius: 5px; transform: translateY(50%); }
+  #head { position: absolute; top: 30px; width: 6px; height: 320px; border-radius: 3px; background: var(--accent-2);
+          box-shadow: 0 0 24px rgba(242,166,121,.9); }
+  .mark { position: absolute; top: 340px; font: 600 22px "Inter", monospace; color: var(--muted); transform: translateX(-50%); white-space: nowrap; }
+  .mark::before { content: ""; position: absolute; left: 50%; top: -14px; width: 2px; height: 10px; background: currentColor; }
+  #karaoke { position: absolute; left: 80px; right: 80px; top: 1350px; text-align: center; font-size: 66px; font-weight: 800; line-height: 1.3; letter-spacing: -1.5px; }
+  #karaoke span { display: inline-block; margin: 0 10px; color: rgba(251,243,236,.25); }
+
+  /* ---------- Scene 5: end card ---------- */
+  #logo { position: absolute; left: 540px; top: 720px; width: 0; height: 0; }
+  #logo svg { position: absolute; left: -170px; top: -170px; width: 340px; height: 340px; overflow: visible; }
+  #shock { position: absolute; left: 540px; top: 720px; width: 300px; height: 300px; margin: -150px 0 0 -150px; border-radius: 50%;
+           border: 6px solid var(--accent-2); opacity: 0; }
+  #wordmark { top: 960px; font-size: 92px; font-weight: 900; letter-spacing: -3px; color: var(--text); }
+  #wordmark .ch { display: inline-block; }
+  #cta { top: 1100px; font-size: 52px; font-weight: 700; color: var(--muted); letter-spacing: -1px; }
+  #pill { position: absolute; left: 50%; top: 1230px; transform: translateX(-50%); height: 84px; padding: 0 34px; border-radius: 42px;
+          display: flex; align-items: center; gap: 16px; border: 2px solid var(--accent); background: rgba(217,119,87,.12);
+          font: 600 30px "Inter", sans-serif; color: var(--text); white-space: nowrap; }
+  #pill svg { width: 34px; height: 34px; stroke: var(--accent-2); stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  #caret { display: inline-block; width: 3px; height: 34px; background: var(--accent-2); margin-left: 4px; vertical-align: middle; }
+
+  #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+  #play { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.55); color: var(--text);
+          font: 600 22px "Inter", system-ui, sans-serif; cursor: pointer; border: 0; }
+  #play span { padding: 16px 28px; border-radius: 999px; background: var(--accent); }
+  #play[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="ambient"><div class="bg"></div><div class="glow" id="glowA"></div><div class="glow" id="glowB"></div><div id="particles"></div></div>
+
+  <!-- Scene 1: hook -->
+  <section class="scene" id="s1">
+    <div class="center" id="h1">Қазақша видеоңыз</div>
+    <div class="center" id="h2">әлі де</div>
+    <div class="center" id="h3">роботпен</div>
+    <div class="center" id="h4">сөйлей ме?</div>
+  </section>
+
+  <!-- Scene 2: home page -->
+  <section class="scene" id="s2">
+    <div id="win">
+      <div id="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+        <div id="url">github.com/aicloudeproduct-lab/-my-first-project</div></div>
+      <div id="page">
+        <div id="nav"><svg class="logo-sm" width="48" height="48" viewBox="-100 -100 200 200"></svg>my-first-project
+          <div class="links"><span>Мүмкіндіктер</span><span>Мысалдар</span></div></div>
+        <div id="badge">Жаңа · қазақша нейрон дауыс</div>
+        <div id="headline">Мәтінді <span class="grad">қазақша сөйлейтін</span> тік видеоға айналдырыңыз</div>
+        <div id="sub">HTML-анимация → MP4 · 1080×1920 · дауыс пен мәтін дәл синхрон</div>
+        <div id="ctaRow">
+          <div class="btn" id="go"><span class="ripple"></span><span id="goLabel">▶ Видео жасау</span></div>
+          <div class="btn" id="gh">GitHub</div>
+        </div>
+        <div id="phones">
+          <div class="phone" id="ph1" style="left:80px;top:40px;background-image:url(assets/ernur-preview.jpg)"></div>
+          <div class="phone" id="ph2" style="left:420px;top:0;background-image:url(assets/ernur-preview.jpg)"></div>
+        </div>
+      </div>
+      <div id="toast">✓ ernur.mp4 · 15 с · дайын</div>
+    </div>
+    <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 21 L9 16.5 L12.5 23.5 L15.5 22 L12 15 L19 15 Z" fill="#fff" stroke="#1a0f0a" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    <div id="flood"></div>
+  </section>
+
+  <!-- Scene 3: features -->
+  <section class="scene" id="s3">
+    <div class="bg"></div>
+    <div class="center kicker" id="s3h1">МҮМКІНДІКТЕР</div>
+    <div class="center" id="s3h2">Бір скрипт — дайын Reels</div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/></svg></div>
+      <div><b>HTML → MP4</b><span>1080×1920, 30 fps — Reels, TikTok үшін</span></div></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+      <div><b>Қазақша нейрон дауыс</b><span>Piper · ISSAI KazakhTTS, табиғи ырғақ</span></div></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+      <div><b>Музыка дауысты баспайды</b><span>Дауыс шыққанда фон өзі басылады</span></div></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 6 2-3h5"/></svg></div>
+      <div><b>Сөз дәл уақытында</b><span>Әр сөз дауыспен бірге шығады</span></div></div>
+    <div id="s3flash"></div>
+  </section>
+
+  <!-- Scene 4: close-up -->
+  <section class="scene" id="s4">
+    <div class="bg"></div>
+    <div id="cam4">
+      <div class="center kicker" id="s4h1">ЕҢ КҮШТІ МҮМКІНДІК</div>
+      <div class="center" id="s4h2">Әр сөз — дауыспен бірге</div>
+      <div class="center grad" id="bigword"></div>
+      <div id="panel"><div id="bars"></div><div id="head"></div></div>
+      <div id="karaoke"></div>
+    </div>
+  </section>
+
+  <!-- Scene 5: end card -->
+  <section class="scene" id="s5">
+    <div class="bg"></div>
+    <div id="shock"></div>
+    <div id="logo"><svg viewBox="-100 -100 200 200"><g id="rays" fill="#d97757"></g></svg></div>
+    <div class="center" id="wordmark"></div>
+    <div class="center" id="cta">Өз тік видеоңызды бүгін жасаңыз</div>
+    <div id="pill"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></svg>
+      <span id="urlText"></span><i id="caret"></i></div>
+  </section>
+
+  <div id="fade"></div>
+</div>
+<button id="play" hidden><span>▶ Дыбыспен ойнату</span></button>
+<audio id="audio" src="audio/launch_soundtrack.wav" preload="auto"></audio>
+
+<script src="audio/launch_timings.js"></script>
+<script>
+/*
+ * Launch video, 22 s. render(t) is a pure function of time.
+ * Timeline (scene starts, clicks, card hits, voice words) comes from
+ * audio/launch_timings.js — the same file the soundtrack is built from.
+ */
+const L = window.LAUNCH;
+const DURATION = L.duration;
+const [S1, S2, S3, S4, S5] = L.scenes;
+const $ = (id) => document.getElementById(id);
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+const easeInCubic = (x) => x * x * x;
+const easeInOutCubic = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOutBack = (x, s = 1.7) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2);
+const easeOutElastic = (x) => x === 0 || x === 1 ? x
+  : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+const pulse = (t, at, w) => Math.exp(-Math.pow((t - at) / w, 2));
+const interp = (x, xs, ys) => {
+  if (x <= xs[0]) return ys[0];
+  for (let i = 1; i < xs.length; i++) if (x <= xs[i]) return lerp(ys[i - 1], ys[i], (x - xs[i - 1]) / (xs[i] - xs[i - 1]));
+  return ys[ys.length - 1];
+};
+let seed = 21;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+// Pop-in used across scenes
+function pop(el, t, start, { dist = 60, dur = 0.5, blur = 14, scale = 0 } = {}) {
+  const e = easeOutCubic(prog(t, start, dur));
+  el.style.opacity = e;
+  el.style.filter = blur ? `blur(${(1 - e) * blur}px)` : '';
+  el.style.transform = `translateY(${(1 - e) * dist}px) scale(${1 + (1 - e) * scale})`;
+}
+
+// ---------- logo (the project's starburst) ----------
+function rays(g, n = 12) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const len = i % 2 ? 62 : 82;
+    r.setAttribute('x', -7); r.setAttribute('width', 14); r.setAttribute('rx', 7);
+    r.setAttribute('y', -len); r.setAttribute('height', len);
+    r.setAttribute('transform', `rotate(${(360 / n) * i})`); r.dataset.len = len;
+    g.appendChild(r); out.push(r);
+  }
+  return out;
+}
+const smallLogo = document.querySelector('.logo-sm');
+const sg = document.createElementNS('http://www.w3.org/2000/svg', 'g'); sg.setAttribute('fill', '#d97757');
+smallLogo.appendChild(sg); rays(sg);
+const bigRays = rays($('rays'));
+
+// ---------- ambient ----------
+const particles = Array.from({ length: 46 }, () => {
+  const el = document.createElement('div'); el.className = 'p';
+  const s = 4 + rand() * 10; el.style.width = el.style.height = s + 'px';
+  $('particles').appendChild(el);
+  return { el, x: rand() * 1080, y: rand() * 1920, sp: 20 + rand() * 60, ph: rand() * 6.28, amp: 10 + rand() * 30, a: 0.15 + rand() * 0.5 };
+});
+
+// ---------- scene 3 cards ----------
+const cards = [...document.querySelectorAll('.card')];
+cards.forEach((c, i) => { c.style.top = (560 + i * 250) + 'px'; });
+
+// ---------- scene 4: waveform, markers, karaoke ----------
+const D = L.demo;
+const BAR_W = 880;
+const bars = D.wave.map((v, i) => {
+  const b = document.createElement('div'); b.className = 'b';
+  b.style.left = (i * BAR_W / D.wave.length) + 'px';
+  b.style.height = Math.max(10, v * 260) + 'px';
+  $('bars').appendChild(b); return b;
+});
+const xOf = (time) => 40 + clamp((time - D.start) / (D.end - D.start)) * BAR_W;
+D.words.forEach((w) => {
+  const m = document.createElement('div'); m.className = 'mark';
+  m.style.left = xOf(w.t) + 'px'; m.textContent = (w.t - D.start).toFixed(2) + ' с';
+  $('panel').appendChild(m);
+});
+const kWords = D.words.map((w) => {
+  const s = document.createElement('span'); s.textContent = w.w; $('karaoke').appendChild(s); return s;
+});
+
+// ---------- scene 5 ----------
+const wmChars = [...'my-first-project'].map((c) => {
+  const s = document.createElement('span'); s.className = 'ch'; s.textContent = c; $('wordmark').appendChild(s); return s;
+});
+const URL_TEXT = 'github.com/aicloudeproduct-lab/-my-first-project';
+
+// Position of an element's centre in stage coordinates (offsets ignore transforms)
+function stagePos(el) {
+  let x = el.offsetWidth / 2, y = el.offsetHeight / 2;
+  for (let n = el; n && n.id !== 'stage'; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; }
+  return [x, y];
+}
+
+// ---------- render ----------
+function render(t) {
+  ['s1', 's2', 's3', 's4', 's5'].forEach((id, i) => {
+    const a = L.scenes[i], b = L.scenes[i + 1] ?? DURATION + 1;
+    $(id).style.visibility = t >= a && t < b ? 'visible' : 'hidden';
+  });
+  $('fade').style.opacity = Math.max(1 - prog(t, 0, 0.25), easeInOutCubic(prog(t, L.end.fade, DURATION - L.end.fade)));
+
+  // ambient (scenes 2–5)
+  $('ambient').style.opacity = t >= S2 ? 1 : 0;
+  $('glowA').style.transform = `translate(${Math.sin(t * .6) * 80}px, ${Math.cos(t * .5) * 60}px)`;
+  $('glowB').style.transform = `translate(${Math.cos(t * .45) * 70}px, ${Math.sin(t * .7) * 90}px)`;
+  particles.forEach((p) => {
+    const y = ((p.y - p.sp * t) % 1960 + 1960) % 1960 - 20;
+    p.el.style.transform = `translate(${p.x + Math.sin(t * .8 + p.ph) * p.amp}px, ${y}px)`;
+    p.el.style.opacity = p.a;
+  });
+
+  scene1(t); scene2(t); scene3(t); scene4(t); scene5(t);
+}
+
+function scene1(t) {
+  const H = L.hook;
+  [['h1', H.words[0]], ['h2', H.words[1]], ['h4', H.last]].forEach(([id, at]) => pop($(id), t, at, { dist: 0, dur: 0.2, blur: 8, scale: 0.18 }));
+  // "роботпен": appears as an unlit tube, then ignites red with a neon flicker
+  const h3 = $('h3');
+  pop(h3, t, H.words[2], { dist: 0, dur: 0.2, blur: 8, scale: 0.18 });
+  const lit = t >= H.red ? interp(t - H.red, L.flicker[0], L.flicker[1]) : 0;
+  const c = (a, b) => Math.round(lerp(a, b, lit));
+  h3.style.color = `rgb(${c(42, 255)}, ${c(42, 59)}, ${c(42, 48)})`;
+  h3.style.textShadow = lit > 0 ? `0 0 ${20 * lit}px rgba(255,59,48,${.9 * lit}), 0 0 ${70 * lit}px rgba(255,59,48,${.6 * lit}), 0 0 ${140 * lit}px rgba(255,40,30,${.45 * lit})` : 'none';
+  h3.style.transform += ` scale(${1 + 0.08 * pulse(t, H.red + 0.05, 0.12)})`;
+  // glitch out on the last half-second
+  const g = prog(t, H.glitch, S2 - H.glitch);
+  if (g > 0) {
+    const j = Math.sin(t * 173) * 26 * g, k = Math.cos(t * 97) * 14 * g;
+    $('s1').style.transform = `translate(${j}px, ${k}px) skewX(${Math.sin(t * 61) * 8 * g}deg) scale(${1 + 0.25 * easeInCubic(g)})`;
+    $('s1').style.filter = `drop-shadow(${10 * g}px 0 rgba(0,255,255,.6)) drop-shadow(${-10 * g}px 0 rgba(255,0,80,.6))`;
+    $('s1').style.opacity = 1 - easeInCubic(g) * 0.7;
+  } else { $('s1').style.transform = ''; $('s1').style.filter = ''; $('s1').style.opacity = 1; }
+}
+
+function scene2(t) {
+  const S = L.site;
+  // window slides up
+  const w = easeOutCubic(prog(t, S2, 0.6));
+  const win = $('win');
+  // zoom into the button at the end (camera on the window)
+  const z = easeInCubic(prog(t, S.zoom, S3 - S.zoom));
+  const [bx, by] = stagePos($('go'));
+  const zs = 1 + z * 14;
+  win.style.transformOrigin = `${bx - 60}px ${by - 230}px`;
+  win.style.transform = `translateY(${(1 - w) * 500}px) scale(${(0.92 + 0.08 * w) * zs})`;
+  win.style.opacity = w;
+  $('flood').style.opacity = easeInCubic(prog(t, S.zoom + 0.2, S3 - S.zoom - 0.2));
+
+  // page content staggers in
+  ['nav', 'badge', 'headline', 'sub', 'ctaRow', 'phones'].forEach((id, i) => pop($(id), t, S2 + 0.35 + i * 0.12, { dist: 40, dur: 0.5, blur: 10 }));
+  $('ph1').style.transform = `rotate(-7deg) translateY(${Math.sin(t * 1.2) * 8}px)`;
+  $('ph2').style.transform = `rotate(6deg) translateY(${Math.cos(t * 1.1) * 8}px)`;
+
+  // cursor: enters bottom-right, eases onto the button, clicks
+  const cur = $('cursor');
+  const m = easeInOutCubic(prog(t, S.cursorIn, S.hover - S.cursorIn));
+  const p0 = [1000, 1820], p2 = [bx + 40, by + 18], p1 = [p2[0] + 260, p2[1] + 380];
+  const cx = (1 - m) ** 2 * p0[0] + 2 * (1 - m) * m * p1[0] + m * m * p2[0];
+  const cy = (1 - m) ** 2 * p0[1] + 2 * (1 - m) * m * p1[1] + m * m * p2[1];
+  const press = pulse(t, S.click + 0.04, 0.07);
+  cur.style.opacity = t >= S.cursorIn && t < S.zoom + 0.2 ? 1 : 0;
+  cur.style.transform = `translate(${cx - 8}px, ${cy - 6}px) scale(${1 - 0.18 * press})`;
+
+  const go = $('go');
+  const hover = easeOutCubic(prog(t, S.hover - 0.2, 0.3));
+  go.style.transform = `translateY(${-6 * hover}px) scale(${1 + 0.03 * hover - 0.06 * press})`;
+  go.style.boxShadow = `0 ${16 + 14 * hover}px ${40 + 30 * hover}px rgba(217,119,87,${.35 + .3 * hover})`;
+  const r = prog(t, S.click, 0.6);
+  const rip = go.querySelector('.ripple');
+  rip.style.left = (go.offsetWidth / 2 + 20) + 'px'; rip.style.top = (go.offsetHeight / 2 - 2) + 'px';
+  rip.style.transform = `translate(-50%, -50%) scale(${easeOutCubic(r) * 14})`;
+  rip.style.opacity = r > 0 ? 1 - r : 0;
+  $('goLabel').textContent = t >= S.done ? '✓ Дайын' : t >= S.click ? '● Жасалуда…' : '▶ Видео жасау';
+  const toast = $('toast');
+  const tk = easeOutBack(prog(t, S.done, 0.4));
+  toast.style.opacity = clamp(tk);
+  toast.style.transform = `translateX(-50%) translateY(${(1 - tk) * 40}px) scale(${0.8 + 0.2 * tk})`;
+}
+
+function scene3(t) {
+  pop($('s3h1'), t, S3 + 0.1, { dist: 30 });
+  pop($('s3h2'), t, S3 + 0.2, { dist: 40 });
+  $('s3flash').style.opacity = 1 - easeOutCubic(prog(t, S3, 0.45));
+  const out = easeInCubic(prog(t, S4 - 0.6, 0.6));
+  cards.forEach((c, i) => {
+    const at = L.cards[i];
+    const k = easeOutCubic(prog(t, at, 0.55));
+    const active = t >= at && (i === cards.length - 1 || t < L.cards[i + 1]);
+    c.style.opacity = k;
+    c.style.filter = `blur(${(1 - k) * 16}px)`;
+    let tr = `translateX(${(1 - k) * 260}px) scale(${1 + 0.04 * pulse(t, at + 0.15, 0.15)})`;
+    c.style.borderColor = active ? 'rgba(217,119,87,.9)' : 'rgba(251,243,236,.10)';
+    c.style.background = active ? 'rgba(217,119,87,.14)' : 'rgba(251,243,236,.06)';
+    const ic = c.querySelector('.ic');
+    const ik = easeOutElastic(prog(t, at + 0.1, 0.8));
+    ic.style.transform = `scale(${ik}) rotate(${(1 - ik) * -30}deg)`;
+    // exit: the last card (the strongest feature) moves to the centre and grows; others leave
+    if (i === cards.length - 1) tr += ` translateY(${-out * 520}px) scale(${1 + out * 0.25})`;
+    else { c.style.opacity = k * (1 - out); tr += ` translateX(${-out * 300}px)`; }
+    c.style.transform = tr;
+  });
+  ['s3h1', 's3h2'].forEach((id) => { $(id).style.opacity *= 1 - out; });
+}
+
+function scene4(t) {
+  const v = easeOutCubic(prog(t, S4, 0.5));
+  const outk = easeInCubic(prog(t, S5 - 0.4, 0.4));
+  $('cam4').style.transform = `scale(${(0.9 + 0.1 * v + 0.05 * prog(t, S4, S5 - S4)) * (1 - 0.3 * outk)})`;
+  $('cam4').style.opacity = v * (1 - outk);
+  $('cam4').style.filter = `blur(${(1 - v) * 12 + outk * 10}px)`;
+  pop($('s4h1'), t, S4 + 0.1, { dist: 20 });
+  pop($('s4h2'), t, S4 + 0.15, { dist: 30 });
+
+  // playhead and waveform
+  const ph = clamp((t - D.start) / (D.end - D.start));
+  $('head').style.left = (40 + ph * BAR_W - 3) + 'px';
+  $('head').style.opacity = clamp((t - (D.start - 0.4)) / 0.3);
+  bars.forEach((b, i) => {
+    const played = i / bars.length <= ph && t >= D.start;
+    b.style.background = played ? 'linear-gradient(180deg, #f2a679, #d97757)' : 'rgba(251,243,236,.18)';
+    const grow = easeOutCubic(prog(t, S4 + 0.2 + i * 0.006, 0.4));
+    b.style.transform = `translateY(50%) scaleY(${grow})`;
+  });
+
+  // current word, karaoke sentence
+  let cur = -1;
+  D.words.forEach((w, i) => { if (t >= w.t - 0.05) cur = i; });
+  const big = $('bigword');
+  if (cur < 0) { big.textContent = ''; }
+  else {
+    big.textContent = D.words[cur].w.replace(/[.,!?]$/, '');
+    const k = easeOutBack(prog(t, D.words[cur].t - 0.05, 0.25));
+    big.style.transform = `scale(${0.7 + 0.3 * k})`;
+    big.style.filter = `blur(${(1 - clamp(k)) * 10}px)`;
+    big.style.backgroundPosition = `${(t * 40) % 200}% 0`;
+  }
+  kWords.forEach((s, i) => {
+    const on = i <= cur;
+    s.style.color = on ? (i === cur ? '#f2a679' : '#fbf3ec') : 'rgba(251,243,236,.25)';
+    s.style.transform = `scale(${1 + 0.1 * (i === cur ? pulse(t, D.words[i].t + 0.05, 0.12) : 0)})`;
+  });
+  pop($('karaoke'), t, S4 + 0.3, { dist: 30 });
+}
+
+function scene5(t) {
+  const E = L.end;
+  const lk = prog(t, E.logo, 1.2);
+  $('logo').style.transform = `rotate(${t * 22 + (1 - easeOutCubic(lk)) * -180}deg) scale(${easeOutElastic(lk)})`;
+  bigRays.forEach((r, i) => {
+    const k = Math.max(0, easeOutBack(prog(t, E.logo + 0.05 + i * 0.04, 0.4)));
+    r.setAttribute('height', r.dataset.len * k); r.setAttribute('y', -r.dataset.len * k);
+  });
+  const sk = prog(t, E.logo, 0.8);
+  $('shock').style.transform = `scale(${0.4 + easeOutCubic(sk) * 2.6})`;
+  $('shock').style.opacity = sk > 0 ? (1 - sk) * 0.8 : 0;
+  wmChars.forEach((c, i) => pop(c, t, E.name + i * 0.025, { dist: 50, dur: 0.45, blur: 10 }));
+  pop($('cta'), t, E.cta, { dist: 40 });
+  const pk = easeOutBack(prog(t, E.url - 0.1, 0.4));
+  $('pill').style.opacity = clamp(pk);
+  $('pill').style.transform = `translateX(-50%) scale(${0.85 + 0.15 * pk})`;
+  const n = Math.round(clamp((t - E.url) / 0.9) * URL_TEXT.length);
+  $('urlText').textContent = URL_TEXT.slice(0, n);
+  $('caret').style.opacity = n < URL_TEXT.length || Math.floor(t * 2.5) % 2 === 0 ? 1 : 0;
+}
+
+window.renderFrame = render;
+window.DURATION = DURATION;
+
+function fit() {
+  const s = Math.min(innerWidth / 1080, innerHeight / 1920);
+  $('stage').style.transform = `scale(${s})`;
+}
+if (new URLSearchParams(location.search).has('export')) {
+  render(0);
+} else {
+  fit(); addEventListener('resize', fit);
+  const audio = $('audio'), btn = $('play');
+  let t0 = null, withSound = false;
+  btn.hidden = false;
+  btn.onclick = () => { btn.hidden = true; withSound = true; audio.currentTime = 0; audio.play().catch(() => { withSound = false; }); };
+  audio.addEventListener('ended', () => { audio.currentTime = 0; audio.play(); });
+  const loop = (now) => {
+    if (t0 === null) t0 = now;
+    render(withSound ? audio.currentTime : ((now - t0) / 1000) % DURATION);
+    requestAnimationFrame(loop);
+  };
+  document.fonts.ready.then(() => requestAnimationFrame(loop));
+}
+</script>
+</body>
+</html>

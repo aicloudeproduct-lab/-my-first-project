@@ -20,3 +20,10 @@
 
 Дауыс моделі: [Piper kk_KZ-issai-high](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models),
 ISSAI KazakhTTS деректерімен үйретілген, лицензиясы CC-BY-4.0.
+
+## Launch video (22 с, 9:16)
+
+- `video/launch.mp4` — дайын видео (1080×1920, 30 fps, музыка + дыбыс эффектілері + демо-дауыс).
+- `video/launch.html` — анимация (5 сахна: хук → басты бет пен клик → мүмкіндіктер → сөз-дауыс синхроны жақыннан → логотип).
+- `video/audio/make_launch_audio.py` — музыка мен эффектілерді жасайды және ортақ таймлайнды `video/audio/launch_timings.js` файлына жазады; анимация да, дыбыс та сол таймлайнмен жүреді.
+- Қайта жасау: `python3 video/audio/make_launch_audio.py && node video/render.mjs launch.html audio/launch_soundtrack.wav`
