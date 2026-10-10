@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my-first-project — brag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  /* Palette, font and logo from the project (video/ernur.html, video/salem-claude.html) */
+  :root {
+    --bg-1: #1a0f0a; --bg-2: #2b140b; --accent: #d97757; --accent-2: #f2a679;
+    --text: #fbf3ec; --muted: #e9cdb9; --red: #ff3b30;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: "Inter Display", "Inter", system-ui, sans-serif; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; flex: none; background: #000; transform-origin: center; }
+  .scene { position: absolute; inset: 0; visibility: hidden; }
+  .center { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; }
+  .grad { background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 50%, var(--accent) 100%);
+          background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .kicker { font-size: 28px; font-weight: 700; letter-spacing: 8px; color: var(--accent); }
+
+  #ambient { position: absolute; inset: 0; opacity: 0;
+             background: radial-gradient(120% 80% at 50% 40%, var(--bg-2) 0%, var(--bg-1) 55%, #0c0705 100%); }
+  .glow { position: absolute; border-radius: 50%; filter: blur(120px); }
+  #glowA { width: 900px; height: 900px; background: #d97757; left: -250px; top: 250px; opacity: .28; }
+  #glowB { width: 800px; height: 800px; background: #a8452a; right: -300px; bottom: 200px; opacity: .24; }
+  .p { position: absolute; border-radius: 50%; background: var(--accent-2); }
+
+  /* Scene 1 — hook */
+  #s1 { background: #000; }
+  #s1 .center { color: var(--text); font-weight: 800; letter-spacing: -3px; }
+  #h1 { top: 690px; font-size: 112px; }
+  #h1 span { display: inline-block; margin: 0 14px; }
+  #h2 { top: 845px; font-size: 186px; font-weight: 900 !important; letter-spacing: -7px !important; }
+  #h3 { top: 1110px; font-size: 112px; }
+
+  /* Scene 2 — page */
+  #win { position: absolute; left: 60px; top: 230px; width: 960px; height: 1440px; border-radius: 40px; overflow: hidden;
+         background: radial-gradient(110% 70% at 50% 20%, #2b140b 0%, #1a0f0a 60%, #120a06 100%);
+         border: 2px solid rgba(251,243,236,.12); box-shadow: 0 60px 140px rgba(0,0,0,.6); }
+  #bar { height: 76px; display: flex; align-items: center; gap: 14px; padding: 0 28px; background: rgba(0,0,0,.35);
+         border-bottom: 1px solid rgba(251,243,236,.08); }
+  #bar i { width: 18px; height: 18px; border-radius: 50%; display: block; }
+  #url { margin-left: 18px; flex: 1; height: 44px; border-radius: 22px; background: rgba(251,243,236,.07); color: var(--muted);
+         font: 500 21px "Inter", sans-serif; display: flex; align-items: center; padding: 0 22px; white-space: nowrap; overflow: hidden; }
+  #page { padding: 36px 56px; color: var(--text); text-align: center; }
+  #nav { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 800; text-align: left; }
+  #nav .r { margin-left: auto; font: 600 22px "Inter", sans-serif; color: var(--muted); }
+  #headline { margin-top: 44px; font-size: 66px; line-height: 1.05; font-weight: 900; letter-spacing: -2px; }
+  #desc { margin-top: 18px; font-size: 29px; line-height: 1.4; color: var(--muted); font-weight: 500; }
+  #chips { margin-top: 24px; display: flex; gap: 12px; justify-content: center; }
+  #chips span { padding: 8px 18px; border-radius: 14px; background: rgba(251,243,236,.07); border: 1px solid rgba(251,243,236,.12);
+                font: 600 22px "Inter", monospace; color: var(--accent-2); }
+  #slot { margin: 36px auto 0; width: 400px; height: 711px; }
+  #cursor { position: absolute; left: 0; top: 0; width: 76px; height: 76px; transform-origin: 8px 6px; z-index: 5; }
+
+  /* The real ernur.html, framed as a phone; moves between scenes */
+  #player { position: absolute; left: 0; top: 0; overflow: hidden; border-radius: 34px; z-index: 4;
+            border: 5px solid #3a2116; box-shadow: 0 40px 100px rgba(0,0,0,.6); background: #0c0705; }
+  #ern { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; border: 0; transform-origin: 0 0; pointer-events: none; }
+
+  /* Scene 3 — feature cards */
+  .card { position: absolute; left: 70px; width: 940px; height: 170px; border-radius: 32px; display: flex; align-items: center; gap: 30px;
+          padding: 0 34px; background: rgba(251,243,236,.06); border: 2px solid rgba(251,243,236,.10); color: var(--text); }
+  .card .ic { flex: none; width: 104px; height: 104px; border-radius: 28px; display: grid; place-items: center;
+              background: linear-gradient(145deg, var(--accent-2), var(--accent)); }
+  .card .ic svg { width: 58px; height: 58px; stroke: #1a0f0a; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .card b { display: block; font-size: 46px; font-weight: 800; letter-spacing: -1px; }
+  .card span { display: block; margin-top: 6px; font-size: 29px; color: var(--muted); font-weight: 500; }
+
+  /* Scene 4 — close-up on word timing */
+  #s4k { top: 110px; }
+  #s4t { top: 160px; font-size: 70px; font-weight: 900; letter-spacing: -2px; color: var(--text); }
+  #tl { position: absolute; left: 90px; width: 900px; top: 1400px; height: 120px; }
+  #track { position: absolute; left: 0; right: 0; top: 60px; height: 6px; border-radius: 3px; background: rgba(251,243,236,.15); }
+  #fill { position: absolute; left: 0; top: 60px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .tk { position: absolute; top: 52px; width: 22px; height: 22px; margin-left: -11px; border-radius: 50%; background: #3a2116; border: 3px solid rgba(251,243,236,.3); }
+  .tl { position: absolute; top: 0; transform: translateX(-50%); font: 600 26px "Inter", monospace; color: rgba(233,205,185,.6); white-space: nowrap; }
+  #chip { position: absolute; left: 0; right: 0; top: 1560px; text-align: center; white-space: nowrap; }
+  #chipWord { font-size: 92px; font-weight: 900; letter-spacing: -3px; display: inline-block; }
+  #chipTime { display: block; margin-top: 8px; font: 600 34px "Inter", monospace; color: var(--muted); }
+
+  /* Scene 5 — end card */
+  #logo { position: absolute; left: 540px; top: 760px; width: 0; height: 0; }
+  #logo svg { position: absolute; left: -170px; top: -170px; width: 340px; height: 340px; overflow: visible; }
+  #shock { position: absolute; left: 540px; top: 760px; width: 300px; height: 300px; margin: -150px 0 0 -150px; border-radius: 50%;
+           border: 6px solid var(--accent-2); opacity: 0; }
+  #wordmark { top: 990px; font-size: 92px; font-weight: 900; letter-spacing: -3px; color: var(--text); }
+  #wordmark .ch { display: inline-block; }
+  #cta { top: 1130px; font-size: 54px; font-weight: 700; color: var(--muted); letter-spacing: -1px; }
+  #pill { position: absolute; left: 50%; top: 1260px; transform: translateX(-50%); height: 84px; padding: 0 34px; border-radius: 42px;
+          display: flex; align-items: center; gap: 16px; border: 2px solid var(--accent); background: rgba(217,119,87,.12);
+          font: 600 30px "Inter", sans-serif; color: var(--text); white-space: nowrap; }
+  #pill svg { width: 34px; height: 34px; stroke: var(--accent-2); stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  #caret { display: inline-block; width: 3px; height: 34px; background: var(--accent-2); margin-left: 4px; vertical-align: middle; }
+
+  #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 10; }
+  #play { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.55); color: var(--text);
+          font: 600 22px "Inter", system-ui, sans-serif; cursor: pointer; border: 0; z-index: 20; }
+  #play span { padding: 16px 28px; border-radius: 999px; background: var(--accent); }
+  #play[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="ambient"><div class="glow" id="glowA"></div><div class="glow" id="glowB"></div><div id="particles"></div></div>
+
+  <section class="scene" id="s1">
+    <div class="center" id="h1"><span>Видеоңыз</span><span>әлі</span></div>
+    <div class="center" id="h2">роботпен</div>
+    <div class="center" id="h3">сөйлей ме?</div>
+  </section>
+
+  <section class="scene" id="s2">
+    <div id="win">
+      <div id="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+        <div id="url">github.com/aicloudeproduct-lab/-my-first-project</div></div>
+      <div id="page">
+        <div id="nav"><svg class="logo-sm" width="46" height="46" viewBox="-100 -100 200 200"></svg>my-first-project<span class="r">README.md</span></div>
+        <!-- copy from README.md -->
+        <div id="headline">Сәлем! Менің есімім <span class="grad">Ернұр</span></div>
+        <div id="desc">15 секунд, 1080×1920, 30 fps,<br>қазақша дауыс пен фондық музыкасы бар.</div>
+        <div id="chips"><span>ernur.html</span><span>make_audio.py</span><span>render.mjs</span></div>
+        <div id="slot"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s3">
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/></svg></div>
+      <div><b>HTML → MP4</b><span>1080×1920 · 30 fps</span></div></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+      <div><b>Қазақша нейрон дауыс</b><span>Piper kk_KZ-issai-high</span></div></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+      <div><b>Тыныш фондық музыка</b><span>Дауыс шыққанда өзі басылады</span></div></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 6 2-3h5"/></svg></div>
+      <div><b>Сөз дәл уақытында</b><span>Әр сөздің уақыты өлшенеді</span></div></div>
+  </section>
+
+  <section class="scene" id="s4">
+    <div class="center kicker" id="s4k">ЕҢ КҮШТІ МҮМКІНДІК</div>
+    <div class="center" id="s4t">Әр сөз — дауыспен бірге</div>
+    <div id="tl"><div id="track"></div><div id="fill"></div></div>
+    <div id="chip"><span id="chipWord" class="grad"></span><span id="chipTime"></span></div>
+  </section>
+
+  <section class="scene" id="s5">
+    <div id="shock"></div>
+    <div id="logo"><svg viewBox="-100 -100 200 200"><g id="rays" fill="#d97757"></g></svg></div>
+    <div class="center" id="wordmark"></div>
+    <div class="center" id="cta">Өз тік видеоңызды жасаңыз</div>
+    <div id="pill"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></svg>
+      <span id="urlText"></span><i id="caret"></i></div>
+  </section>
+
+  <div id="player"><iframe id="ern" src="../../video/ernur.html?export" title="ernur.html"></iframe></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 21 L9 16.5 L12.5 23.5 L15.5 22 L12 15 L19 15 Z" fill="#fff" stroke="#1a0f0a" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <div id="fade"></div>
+</div>
+<button id="play" hidden><span>▶ Дыбыспен ойнату</span></button>
+<audio id="audio" src="soundtrack.wav" preload="auto"></audio>
+
+<script src="timeline.js"></script>
+<script src="../../video/audio/timings.js"></script>
+<script>
+/*
+ * /brag launch video, 23 s, 1080×1920. render(t) is a pure function of time.
+ * Timeline comes from timeline.js (written by make_audio.py with the soundtrack).
+ * The phone is the real video/ernur.html, driven frame by frame via its renderFrame(t).
+ * Must be served over http (render.mjs does this) so the iframe is same-origin.
+ */
+const B = window.BRAG;
+const [S1, S2, S3, S4, S5] = B.scenes;
+const DURATION = B.duration;
+const WORDS = window.VOICE_TIMINGS[3].words;           // Ernur's line 3, measured word starts (ernur time)
+const LINE3 = window.VOICE_TIMINGS[3];
+const $ = (id) => document.getElementById(id);
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+const easeInCubic = (x) => x * x * x;
+const easeInOutCubic = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOutBack = (x, s = 1.7) => Math.max(0, 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2));
+const easeOutElastic = (x) => x === 0 || x === 1 ? x : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+const pulse = (t, at, w) => Math.exp(-Math.pow((t - at) / w, 2));
+const interp = (x, xs, ys) => {
+  if (x <= xs[0]) return ys[0];
+  for (let i = 1; i < xs.length; i++) if (x <= xs[i]) return lerp(ys[i - 1], ys[i], (x - xs[i - 1]) / (xs[i] - xs[i - 1]));
+  return ys[ys.length - 1];
+};
+let seed = 21;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+function pop(el, t, start, { dist = 50, dur = 0.45, blur = 12, scale = 0 } = {}) {
+  const e = easeOutCubic(prog(t, start, dur));
+  el.style.opacity = e;
+  el.style.filter = blur ? `blur(${(1 - e) * blur}px)` : '';
+  el.style.transform = `translateY(${(1 - e) * dist}px) scale(${1 + (1 - e) * scale})`;
+}
+function rays(g) {
+  const out = [];
+  for (let i = 0; i < 12; i++) {
+    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const len = i % 2 ? 62 : 82;
+    r.setAttribute('x', -7); r.setAttribute('width', 14); r.setAttribute('rx', 7);
+    r.setAttribute('y', -len); r.setAttribute('height', len);
+    r.setAttribute('transform', `rotate(${30 * i})`); r.dataset.len = len;
+    g.appendChild(r); out.push(r);
+  }
+  return out;
+}
+
+// ---------- build ----------
+const sg = document.createElementNS('http://www.w3.org/2000/svg', 'g'); sg.setAttribute('fill', '#d97757');
+document.querySelector('.logo-sm').appendChild(sg); rays(sg);
+const bigRays = rays($('rays'));
+const particles = Array.from({ length: 44 }, () => {
+  const el = document.createElement('div'); el.className = 'p';
+  const s = 4 + rand() * 10; el.style.width = el.style.height = s + 'px';
+  $('particles').appendChild(el);
+  return { el, x: rand() * 1080, y: rand() * 1920, sp: 20 + rand() * 60, ph: rand() * 6.28, amp: 10 + rand() * 30, a: 0.15 + rand() * 0.45 };
+});
+const cards = [...document.querySelectorAll('.card')];
+cards.forEach((c, i) => { c.style.top = (950 + i * 192) + 'px'; });
+
+// Scene 4 timeline over Ernur's line 3
+const E0 = LINE3.start, E1 = LINE3.end + 0.1;
+const xOf = (e) => clamp((e - E0) / (E1 - E0)) * 900;
+const ticks = WORDS.map((w) => {
+  const k = document.createElement('div'); k.className = 'tk'; k.style.left = xOf(w.t) + 'px'; $('tl').appendChild(k);
+  const l = document.createElement('div'); l.className = 'tl'; l.style.left = xOf(w.t) + 'px'; l.textContent = w.t.toFixed(2);
+  $('tl').appendChild(l);
+  return [k, l];
+});
+const wmChars = [...'my-first-project'].map((c) => {
+  const s = document.createElement('span'); s.className = 'ch'; s.textContent = c; $('wordmark').appendChild(s); return s;
+});
+const URL_TEXT = 'github.com/aicloudeproduct-lab/-my-first-project';
+
+// ---------- the real player ----------
+let ernWin = null, ernPlay = null;
+window.bragReady = new Promise((resolve) => {
+  const f = $('ern');
+  const init = async () => {
+    ernWin = f.contentWindow;
+    const d = f.contentDocument;
+    await d.fonts.ready;
+    // ernur.html's own «▶ Дыбыспен ойнату» button — enlarged so it reads at phone size
+    ernPlay = d.getElementById('play');
+    ernPlay.hidden = false;
+    ernPlay.querySelector('span').style.cssText = 'font-size:84px;padding:48px 80px;font-weight:800;white-space:nowrap;display:inline-block;';
+    resolve();
+  };
+  if (f.contentDocument && f.contentDocument.readyState === 'complete' && f.contentWindow.renderFrame) init();
+  else f.addEventListener('load', init);
+}).then(() => document.fonts.ready);
+
+// Stage-space box of an element (offsets ignore transforms)
+function boxOf(el) {
+  let x = 0, y = 0;
+  for (let n = el; n && n.id !== 'stage'; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; }
+  return { x, y, w: el.offsetWidth };
+}
+const mixBox = (a, b, k) => ({ x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), w: lerp(a.w, b.w, k) });
+const BOX3 = { x: 325, y: 130, w: 430 };
+const BOX4 = { x: 260, y: 300, w: 560 };
+const BOX5 = { x: 540 - 40, y: 760 - 71, w: 80 };
+
+// ---------- render ----------
+function render(t) {
+  ['s1', 's2', 's3', 's4', 's5'].forEach((id, i) => {
+    const a = B.scenes[i], b = B.scenes[i + 1] ?? DURATION + 1;
+    // scene 2 lingers through its exit transition
+    const end = id === 's2' ? b + 0.4 : b;
+    $(id).style.visibility = t >= a && t < end ? 'visible' : 'hidden';
+  });
+  $('fade').style.opacity = Math.max(1 - prog(t, 0, 0.2), easeInOutCubic(prog(t, B.end.fade, DURATION - B.end.fade)));
+
+  $('ambient').style.opacity = t >= S2 ? 1 : 0;
+  $('glowA').style.transform = `translate(${Math.sin(t * .6) * 80}px, ${Math.cos(t * .5) * 60}px)`;
+  $('glowB').style.transform = `translate(${Math.cos(t * .45) * 70}px, ${Math.sin(t * .7) * 90}px)`;
+  particles.forEach((p) => {
+    const y = ((p.y - p.sp * t) % 1960 + 1960) % 1960 - 20;
+    p.el.style.transform = `translate(${p.x + Math.sin(t * .8 + p.ph) * p.amp}px, ${y}px)`;
+    p.el.style.opacity = p.a;
+  });
+
+  scene1(t); scene2(t); scene3(t); scene4(t); scene5(t); player(t);
+}
+
+function scene1(t) {
+  const H = B.hook;
+  const [w1, w2] = $('h1').children;
+  pop(w1, t, H.words[0], { dist: 0, dur: 0.18, blur: 8, scale: 0.2 });
+  pop(w2, t, H.words[1], { dist: 0, dur: 0.18, blur: 8, scale: 0.2 });
+  const h2 = $('h2');
+  pop(h2, t, H.words[2], { dist: 0, dur: 0.18, blur: 8, scale: 0.2 });
+  pop($('h3'), t, H.words[3], { dist: 0, dur: 0.18, blur: 8, scale: 0.2 });
+  // «роботпен» — an unlit tube that ignites red with a neon flicker (same flicker gates the hum)
+  const lit = t >= H.red ? interp(t - H.red, B.flicker[0], B.flicker[1]) : 0;
+  const c = (a, b) => Math.round(lerp(a, b, lit));
+  h2.style.color = `rgb(${c(48, 255)}, ${c(44, 59)}, ${c(44, 48)})`;
+  h2.style.textShadow = lit > 0 ? `0 0 ${18 * lit}px rgba(255,59,48,${.9 * lit}), 0 0 ${64 * lit}px rgba(255,59,48,${.6 * lit}), 0 0 ${140 * lit}px rgba(255,40,30,${.45 * lit})` : 'none';
+  h2.style.transform += ` scale(${1 + 0.07 * pulse(t, H.red + 0.05, 0.12)})`;
+  const g = prog(t, H.glitch, S2 - H.glitch);
+  const s1 = $('s1');
+  if (g > 0) {
+    s1.style.transform = `translate(${Math.sin(t * 173) * 24 * g}px, ${Math.cos(t * 97) * 12 * g}px) skewX(${Math.sin(t * 61) * 7 * g}deg) scale(${1 + 0.22 * easeInCubic(g)})`;
+    s1.style.filter = `drop-shadow(${10 * g}px 0 rgba(0,255,255,.55)) drop-shadow(${-10 * g}px 0 rgba(255,0,80,.55))`;
+    s1.style.opacity = 1 - easeInCubic(g) * 0.75;
+  } else { s1.style.transform = ''; s1.style.filter = ''; s1.style.opacity = 1; }
+}
+
+function scene2(t) {
+  const P = B.page;
+  const w = easeOutCubic(prog(t, S2, 0.6));
+  const out = easeInCubic(prog(t, S3 - 0.2, 0.55));
+  const win = $('win');
+  win.style.transform = `translateY(${(1 - w) * 420 + out * 120}px) scale(${1 - out * 0.06})`;
+  win.style.opacity = Math.min(w, 1 - out);
+  win.style.filter = out > 0 ? `blur(${out * 10}px)` : '';
+  ['nav', 'headline', 'desc', 'chips'].forEach((id, i) => pop($(id), t, S2 + 0.3 + i * 0.12, { dist: 30 }));
+
+  // cursor: eases in from bottom-right onto the real play button and clicks
+  const slot = boxOf($('slot'));
+  const bx = slot.x + 200, by = slot.y + (1 - w) * 420 + 355;
+  const m = easeInOutCubic(prog(t, P.cursorIn, P.hover - P.cursorIn));
+  const p0 = [1010, 1840], p2 = [bx + 30, by + 20], p1 = [p2[0] + 280, p2[1] + 340];
+  const cx = (1 - m) ** 2 * p0[0] + 2 * (1 - m) * m * p1[0] + m * m * p2[0];
+  const cy = (1 - m) ** 2 * p0[1] + 2 * (1 - m) * m * p1[1] + m * m * p2[1];
+  const press = pulse(t, P.click + 0.04, 0.07);
+  const cur = $('cursor');
+  cur.style.opacity = t >= P.cursorIn && t < P.click + 0.7 ? 1 - prog(t, P.click + 0.4, 0.3) : 0;
+  cur.style.transform = `translate(${cx - 8}px, ${cy - 6}px) scale(${1 - 0.18 * press})`;
+}
+
+function scene3(t) {
+  const out = easeInCubic(prog(t, S4 - 0.5, 0.5));
+  cards.forEach((c, i) => {
+    const at = B.cards[i];
+    const k = easeOutCubic(prog(t, at, 0.5));
+    const active = t >= at && (i === cards.length - 1 || t < B.cards[i + 1]);
+    c.style.opacity = k * (1 - out);
+    c.style.filter = `blur(${(1 - k) * 14 + out * 8}px)`;
+    c.style.transform = `translateX(${(1 - k) * 240 - out * 200}px) scale(${1 + 0.035 * pulse(t, at + 0.12, 0.14)})`;
+    c.style.borderColor = active ? 'rgba(217,119,87,.9)' : 'rgba(251,243,236,.10)';
+    c.style.background = active ? 'rgba(217,119,87,.14)' : 'rgba(251,243,236,.06)';
+    const ik = easeOutElastic(prog(t, at + 0.08, 0.8));
+    c.querySelector('.ic').style.transform = `scale(${ik}) rotate(${(1 - ik) * -30}deg)`;
+  });
+}
+
+function scene4(t) {
+  const out = easeInCubic(prog(t, S5 - 0.4, 0.4));
+  pop($('s4k'), t, S4 + 0.15, { dist: 20 });
+  pop($('s4t'), t, S4 + 0.25, { dist: 30 });
+  pop($('tl'), t, S4 + 0.45, { dist: 30 });
+  $('s4').style.opacity = 1 - out;
+  const e = t - B.player.start;                             // ernur time
+  $('fill').style.width = xOf(e) + 'px';
+  let cur = -1;
+  WORDS.forEach((w, i) => {
+    const on = e >= w.t;
+    if (on) cur = i;
+    const [k, l] = ticks[i];
+    k.style.background = on ? '#f2a679' : '#3a2116';
+    k.style.borderColor = on ? '#f2a679' : 'rgba(251,243,236,.3)';
+    k.style.transform = `scale(${1 + 0.6 * pulse(e, w.t + 0.05, 0.1)})`;
+    l.style.color = on ? '#fbf3ec' : 'rgba(233,205,185,.6)';
+  });
+  const word = $('chipWord'), time = $('chipTime');
+  if (cur < 0) { word.textContent = ''; time.textContent = ''; }
+  else {
+    const w = WORDS[cur];
+    word.textContent = w.w.replace(/[.,!?]$/, '');
+    time.textContent = `${w.t.toFixed(2)} с`;
+    const k = easeOutBack(prog(e, w.t, 0.22));
+    word.style.transform = `scale(${0.75 + 0.25 * k})`;
+    word.style.filter = `blur(${(1 - clamp(k)) * 8}px)`;
+    word.style.backgroundPosition = `${(t * 40) % 200}% 0`;
+  }
+}
+
+function scene5(t) {
+  const E = B.end;
+  const lk = prog(t, E.logo, 1.2);
+  $('logo').style.transform = `rotate(${t * 22 + (1 - easeOutCubic(lk)) * -180}deg) scale(${easeOutElastic(lk)})`;
+  bigRays.forEach((r, i) => {
+    const k = easeOutBack(prog(t, E.logo + 0.05 + i * 0.04, 0.4));
+    r.setAttribute('height', r.dataset.len * k); r.setAttribute('y', -r.dataset.len * k);
+  });
+  const sk = prog(t, E.logo, 0.8);
+  $('shock').style.transform = `scale(${0.4 + easeOutCubic(sk) * 2.6})`;
+  $('shock').style.opacity = sk > 0 ? (1 - sk) * 0.8 : 0;
+  wmChars.forEach((c, i) => pop(c, t, E.name + i * 0.025, { dist: 50, dur: 0.45, blur: 10 }));
+  pop($('cta'), t, E.cta, { dist: 40 });
+  const pk = easeOutBack(prog(t, E.url - 0.1, 0.4));
+  $('pill').style.opacity = clamp(pk);
+  $('pill').style.transform = `translateX(-50%) scale(${0.85 + 0.15 * pk})`;
+  const n = Math.round(clamp((t - E.url) / 0.9) * URL_TEXT.length);
+  $('urlText').textContent = URL_TEXT.slice(0, n);
+  $('caret').style.opacity = n < URL_TEXT.length || Math.floor(t * 2.5) % 2 === 0 ? 1 : 0;
+}
+
+function player(t) {
+  const P = B.player, pl = $('player');
+  if (!ernWin || t < S2) { pl.style.visibility = 'hidden'; return; }
+  pl.style.visibility = 'visible';
+  // where the phone sits: in the page slot → top (features) → centre (close-up) → into the logo
+  const w2 = easeOutCubic(prog(t, S2, 0.6));
+  const slot = boxOf($('slot'));
+  const b2 = { x: slot.x, y: slot.y + (1 - w2) * 420, w: slot.w };
+  let box = b2;
+  box = mixBox(box, BOX3, easeInOutCubic(prog(t, S3 - 0.3, 0.7)));
+  box = mixBox(box, BOX4, easeInOutCubic(prog(t, S4 - 0.3, 0.7)));
+  const out = easeInCubic(prog(t, S5 - 0.35, 0.45));
+  box = mixBox(box, BOX5, out);
+  const h = box.w * 16 / 9;
+  pl.style.left = box.x + 'px'; pl.style.top = box.y + 'px';
+  pl.style.width = box.w + 'px'; pl.style.height = h + 'px';
+  pl.style.opacity = Math.min(w2, 1 - out);
+  pl.style.borderRadius = (box.w * 0.08) + 'px';
+  $('ern').style.transform = `scale(${(box.w - 10) / 1080})`;
+
+  // drive the real ernur.html: poster frame + its play button until the click, then play
+  const e = t < P.start ? P.posterAt : clamp(t - P.start, 0, P.length);
+  ernWin.renderFrame(e);
+  const press = pulse(t, B.page.click + 0.04, 0.07);
+  ernPlay.hidden = t >= B.page.click + 0.12;
+  ernPlay.querySelector('span').style.transform = `scale(${1 - 0.08 * press + 0.04 * easeOutCubic(prog(t, B.page.hover - 0.2, 0.3))})`;
+}
+
+window.renderFrame = render;
+window.DURATION = DURATION;
+
+function fit() { $('stage').style.transform = `scale(${Math.min(innerWidth / 1080, innerHeight / 1920)})`; }
+if (new URLSearchParams(location.search).has('export')) {
+  bragReady.then(() => render(0));
+} else {
+  fit(); addEventListener('resize', fit);
+  const audio = $('audio'), btn = $('play');
+  let t0 = null, withSound = false;
+  btn.hidden = false;
+  btn.onclick = () => { btn.hidden = true; withSound = true; audio.currentTime = 0; audio.play().catch(() => { withSound = false; }); };
+  audio.addEventListener('ended', () => { audio.currentTime = 0; audio.play(); });
+  const loop = (now) => {
+    if (t0 === null) t0 = now;
+    render(withSound ? audio.currentTime : ((now - t0) / 1000) % DURATION);
+    requestAnimationFrame(loop);
+  };
+  bragReady.then(() => requestAnimationFrame(loop));
+}
+</script>
+</body>
+</html>
