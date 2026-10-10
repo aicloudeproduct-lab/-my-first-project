@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сәлем, мен Ернұр</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-1: #1a0f0a;
+    --bg-2: #2b140b;
+    --accent: #d97757;
+    --accent-2: #f2a679;
+    --deep: #3a1a0e;
+    --text: #fbf3ec;
+    --muted: #e9cdb9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #0c0705; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: "Inter Display", "Inter", system-ui, sans-serif; }
+
+  #stage {
+    position: relative; width: 1080px; height: 1920px; overflow: hidden; flex: none;
+    background: radial-gradient(120% 80% at 50% 40%, var(--bg-2) 0%, var(--bg-1) 55%, #0c0705 100%);
+    transform-origin: center center;
+  }
+  .glow { position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0; }
+  #glowA { width: 900px; height: 900px; background: #d97757; left: -250px; top: 250px; }
+  #glowB { width: 800px; height: 800px; background: #a8452a; right: -300px; bottom: 200px; }
+  #particles { position: absolute; inset: 0; }
+  .p { position: absolute; border-radius: 50%; background: var(--accent-2); }
+
+  #burst { position: absolute; left: 540px; top: 560px; width: 0; height: 0; }
+  #burst svg { position: absolute; left: -110px; top: -110px; width: 220px; height: 220px; overflow: visible; }
+
+  .scene { position: absolute; inset: 0; visibility: hidden; }
+  .line { position: absolute; left: 0; right: 0; text-align: center; color: var(--text); white-space: nowrap; }
+  .ch, .w { display: inline-block; }
+  .w { margin: 0 14px; }
+  .grad {
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 50%, var(--accent) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .uline {
+    position: absolute; left: 6%; right: 6%; bottom: 0; height: 14px; border-radius: 7px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transform-origin: left center; transform: scaleX(0);
+  }
+
+  /* Scene 1 */
+  #s1a { top: 800px; font-size: 200px; font-weight: 800; letter-spacing: -6px; }
+  #s1b { top: 1090px; font-size: 96px; font-weight: 600; letter-spacing: -2px; color: var(--muted); }
+  #s1c { top: 1210px; font-size: 180px; font-weight: 900; letter-spacing: -5px; padding-bottom: 26px; }
+  #s1c .wrap { position: relative; display: inline-block; padding-bottom: 30px; }
+
+  /* Scene 2 */
+  #s2a { top: 700px; font-size: 110px; font-weight: 600; letter-spacing: -2px; color: var(--muted); }
+  #s2b { top: 970px; font-size: 360px; font-weight: 900; letter-spacing: -16px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  #s2c { top: 1480px; font-size: 120px; font-weight: 800; letter-spacing: -3px; }
+  #ring { position: absolute; left: 540px; top: 1160px; width: 0; height: 0; }
+  #ring svg { position: absolute; left: -330px; top: -330px; width: 660px; height: 660px; overflow: visible; }
+
+  /* Scene 3: mask reveal — each word rises inside a clipping box */
+  #s3 .line { font-size: 108px; font-weight: 700; letter-spacing: -3px; }
+  #s3a { top: 770px; } #s3b { top: 905px; } #s3c { top: 1070px; } #s3d { top: 1205px; }
+  #s3b { font-weight: 900 !important; }
+  .mask { display: inline-block; overflow: hidden; padding: 0 10px 22px; margin: 0 4px -22px; vertical-align: top; }
+  .mask > span { display: inline-block; }
+
+  /* Transition panels */
+  .panel {
+    position: absolute; left: -300px; width: 1680px; height: 2500px; top: 0;
+    transform: translateY(2600px) rotate(-10deg);
+  }
+  #panelA { background: linear-gradient(160deg, var(--accent-2), var(--accent)); }
+  #panelB { background: var(--deep); }
+
+  /* Segment progress */
+  #dots { position: absolute; left: 50%; top: 1720px; transform: translateX(-50%); display: flex; gap: 18px; }
+  .dot { width: 90px; height: 8px; border-radius: 4px; background: rgba(251, 243, 236, 0.18); overflow: hidden; }
+  .dot i { display: block; height: 100%; width: 100%; background: var(--accent-2); transform-origin: left; transform: scaleX(0); }
+
+  #fade { position: absolute; inset: 0; background: #0c0705; opacity: 1; pointer-events: none; }
+
+  #play {
+    position: fixed; inset: 0; display: grid; place-items: center; background: rgba(12, 7, 5, 0.55);
+    color: var(--text); font: 600 22px "Inter", system-ui, sans-serif; cursor: pointer; border: 0;
+  }
+  #play span { padding: 16px 28px; border-radius: 999px; background: var(--accent); }
+  #play[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow" id="glowA"></div>
+  <div class="glow" id="glowB"></div>
+  <div id="particles"></div>
+
+  <div id="burst">
+    <svg viewBox="-100 -100 200 200" aria-hidden="true"><g id="rays" fill="#d97757"></g></svg>
+  </div>
+
+  <section class="scene" id="s1">
+    <div class="line" id="s1a"></div>
+    <div class="line" id="s1b"><span class="w">Менің</span><span class="w">есімім</span></div>
+    <div class="line" id="s1c"><span class="wrap"><span class="ch grad" id="name">Ернұр</span><span class="uline" id="nameLine"></span></span></div>
+  </section>
+
+  <section class="scene" id="s2">
+    <div id="ring">
+      <svg viewBox="-330 -330 660 660" aria-hidden="true">
+        <circle r="300" fill="none" stroke="rgba(251,243,236,0.08)" stroke-width="10"/>
+        <circle id="arc" r="300" fill="none" stroke="#d97757" stroke-width="10" stroke-linecap="round"
+                transform="rotate(-90)" stroke-dasharray="1885" stroke-dashoffset="1885"/>
+      </svg>
+    </div>
+    <div class="line" id="s2a"><span class="w">Мен</span></div>
+    <div class="line" id="s2b"><span class="ch grad" id="age">18</span></div>
+    <div class="line" id="s2c"><span class="w">жастамын</span></div>
+  </section>
+
+  <section class="scene" id="s3">
+    <div class="line" id="s3a"></div>
+    <div class="line" id="s3b"></div>
+    <div class="line" id="s3c"></div>
+    <div class="line" id="s3d"></div>
+  </section>
+
+  <div id="dots"><div class="dot"><i></i></div><div class="dot"><i></i></div><div class="dot"><i></i></div></div>
+
+  <div class="panel" id="panelB"></div>
+  <div class="panel" id="panelA"></div>
+  <div id="fade"></div>
+</div>
+<button id="play" hidden><span>▶ Дыбыспен ойнату</span></button>
+<audio id="audio" src="audio/soundtrack.wav" preload="auto"></audio>
+
+<script>
+/*
+ * The animation is a pure function of time: render(t), t in seconds (0..15).
+ * Preview: plays in a loop, synced to the soundtrack after "play" is pressed.
+ * Export: render.mjs calls window.renderFrame(t) once per frame.
+ *
+ * Voice lines (see audio/make_audio.py) start at 0.9 s, 5.6 s and 9.8 s;
+ * word appearance times below follow the measured word timings of the voice.
+ */
+const DURATION = 15;
+const CUT1 = 5.0, CUT2 = 9.2;          // moments the transition panels fully cover the screen
+const $ = (id) => document.getElementById(id);
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+const easeInCubic = (x) => x * x * x;
+const easeInOutCubic = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeInOutQuart = (x) => x < 0.5 ? 8 * x ** 4 : 1 - Math.pow(-2 * x + 2, 4) / 2;
+const easeOutBack = (x, s = 1.9) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2);
+const easeOutElastic = (x) => x === 0 || x === 1 ? x
+  : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+const pulse = (t, at, width) => Math.exp(-Math.pow((t - at) / width, 2));
+
+let seed = 11;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+// ---------- build DOM ----------
+const s1letters = [...'Сәлем!'].map((c) => {
+  const s = document.createElement('span'); s.className = 'ch'; s.textContent = c;
+  $('s1a').appendChild(s); return s;
+});
+const s1words = [...$('s1b').children];
+
+// Scene 3 lines: [line id, words, highlighted?]
+const s3words = [];
+[['s3a', ['Жасанды']], ['s3b', ['интеллектпен'], true], ['s3c', ['жұмыс', 'істеуді']], ['s3d', ['үйреніп', 'жүрмін']]]
+  .forEach(([id, list, hl]) => list.forEach((w) => {
+    const m = document.createElement('span'); m.className = 'mask';
+    const inner = document.createElement('span'); inner.textContent = w;
+    if (hl) inner.className = 'grad';
+    m.appendChild(inner); $(id).appendChild(m); s3words.push(inner);
+  }));
+// Start times of each word in scene 3 (≈ when the voice says it)
+const S3_TIMES = [9.65, 10.45, 11.7, 12.2, 12.85, 13.3];
+
+const rays = $('rays');
+for (let i = 0; i < 12; i++) {
+  const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  const len = i % 2 ? 62 : 82;
+  r.setAttribute('x', -7); r.setAttribute('width', 14); r.setAttribute('rx', 7);
+  r.setAttribute('transform', `rotate(${30 * i})`); r.dataset.len = len;
+  rays.appendChild(r);
+}
+const rayEls = [...rays.children];
+
+const particles = Array.from({ length: 50 }, () => {
+  const el = document.createElement('div'); el.className = 'p';
+  const size = 4 + rand() * 10; el.style.width = el.style.height = size + 'px';
+  $('particles').appendChild(el);
+  return { el, x: rand() * 1080, y: rand() * 1920, speed: 20 + rand() * 60,
+           phase: rand() * Math.PI * 2, amp: 10 + rand() * 30, alpha: 0.15 + rand() * 0.5 };
+});
+const dotFills = [...document.querySelectorAll('.dot i')];
+
+// Word rise with blur
+function rise(el, t, start, dist = 90, dur = 0.7) {
+  const e = easeOutCubic(prog(t, start, dur));
+  el.style.opacity = e;
+  el.style.filter = `blur(${(1 - e) * 14}px)`;
+  el.style.transform = `translateY(${(1 - e) * dist}px)`;
+}
+// Scene exit before a cut: drift up, grow slightly, blur away
+function exitScene(el, t, cut) {
+  const e = easeInCubic(prog(t, cut - 0.55, 0.5));
+  el.style.opacity = 1 - e;
+  el.style.filter = `blur(${e * 16}px)`;
+  el.style.transform = `translateY(${-e * 80}px) scale(${1 + e * 0.06})`;
+}
+// Transition: two skewed panels sweep bottom → top, covering the screen at `cut`
+function panels(t) {
+  const sweep = (cut, lag) => {
+    const k = prog(t, cut - 0.42 + lag, 0.84);
+    if (k <= 0 || k >= 1) return null;
+    return 2600 - easeInOutQuart(k) * 5300;   // 2600 (below) → -2700 (above)
+  };
+  const y = (lag) => sweep(CUT1, lag) ?? sweep(CUT2, lag) ?? 2600;
+  $('panelB').style.transform = `translateY(${y(0.07)}px) rotate(-10deg)`;
+  $('panelA').style.transform = `translateY(${y(0)}px) rotate(-10deg)`;
+}
+
+// ---------- render ----------
+function render(t) {
+  $('fade').style.opacity = Math.max(1 - easeOutCubic(prog(t, 0, 0.6)), easeInOutCubic(prog(t, 14.4, 0.6)));
+
+  const g = easeOutCubic(prog(t, 0, 1.5));
+  $('glowA').style.opacity = 0.35 * g;
+  $('glowA').style.transform = `translate(${Math.sin(t * 0.6) * 80}px, ${Math.cos(t * 0.5) * 60}px)`;
+  $('glowB').style.opacity = 0.28 * g;
+  $('glowB').style.transform = `translate(${Math.cos(t * 0.45) * 70}px, ${Math.sin(t * 0.7) * 90}px)`;
+  particles.forEach((p) => {
+    const y = ((p.y - p.speed * t) % 1960 + 1960) % 1960 - 20;
+    p.el.style.transform = `translate(${p.x + Math.sin(t * 0.8 + p.phase) * p.amp}px, ${y}px)`;
+    p.el.style.opacity = p.alpha * g;
+  });
+
+  // Starburst: elastic intro, constant spin, a kick at every cut
+  const bIn = prog(t, 0.2, 1.2);
+  const kick = 0.3 * (pulse(t, CUT1 + 0.25, 0.18) + pulse(t, CUT2 + 0.25, 0.18));
+  $('burst').style.transform = `rotate(${t * 22 + kick * 120}deg) scale(${easeOutElastic(bIn) * (1 + 0.05 * Math.sin(t * 3)) + kick})`;
+  $('burst').style.opacity = clamp(bIn * 4);
+  rayEls.forEach((r, i) => {
+    const k = easeOutBack(prog(t, 0.3 + i * 0.06, 0.5));
+    r.setAttribute('height', r.dataset.len * k); r.setAttribute('y', -r.dataset.len * k);
+  });
+
+  // Which scene is on screen (the switch happens under the panels)
+  $('s1').style.visibility = t < CUT1 ? 'visible' : 'hidden';
+  $('s2').style.visibility = t >= CUT1 && t < CUT2 ? 'visible' : 'hidden';
+  $('s3').style.visibility = t >= CUT2 ? 'visible' : 'hidden';
+
+  // ---- Scene 1: «Сәлем! Менің есімім Ернұр» (voice 0.9 s) ----
+  s1letters.forEach((c, i) => {
+    const k = prog(t, 0.75 + i * 0.08, 0.7), e = easeOutBack(k);
+    const wave = t > 1.9 ? Math.sin((t - 1.9) * 4 - i * 0.6) * 9 * clamp((t - 1.9) * 2) : 0;
+    c.style.opacity = easeOutCubic(clamp(k * 1.6));
+    c.style.filter = `blur(${(1 - easeOutCubic(k)) * 18}px)`;
+    c.style.transform = `translateY(${(1 - e) * 140 + wave}px) rotate(${(1 - easeOutCubic(k)) * (i % 2 ? 18 : -18)}deg) scale(${0.4 + 0.6 * e})`;
+  });
+  s1words.forEach((w, i) => rise(w, t, 1.85 + i * 0.25));
+  const nk = prog(t, 2.6, 0.9);
+  const name = $('name');
+  name.style.opacity = easeOutCubic(clamp(nk * 2));
+  name.style.filter = `blur(${(1 - easeOutCubic(nk)) * 20}px)`;
+  name.style.transform = `scale(${0.3 + 0.7 * easeOutElastic(nk)}) scale(${1 + 0.08 * pulse(t, 3.6, 0.15)})`;
+  name.style.backgroundPosition = `${(t * 40) % 200}% 0`;
+  $('nameLine').style.transform = `scaleX(${easeInOutCubic(prog(t, 3.2, 0.7))})`;
+  exitScene($('s1'), t, CUT1);
+
+  // ---- Scene 2: «Мен 18 жастамын» (voice 5.6 s) ----
+  rise($('s2a').firstChild, t, 5.35);
+  // "18" counts up 0 → 18 while the voice says «он сегіз»
+  const ck = prog(t, 5.75, 1.0);
+  const age = $('age');
+  age.textContent = String(Math.round(easeOutCubic(ck) * 18));
+  age.style.opacity = easeOutCubic(clamp(ck * 3));
+  age.style.filter = `blur(${(1 - easeOutCubic(clamp(ck * 1.5))) * 18}px)`;
+  age.style.transform = `scale(${0.5 + 0.5 * easeOutBack(clamp(ck * 1.2))}) scale(${1 + 0.1 * pulse(t, 6.85, 0.12)})`;
+  age.style.backgroundPosition = `${(t * 40) % 200}% 0`;
+  $('arc').setAttribute('stroke-dashoffset', 1885 * (1 - easeInOutCubic(prog(t, 5.6, 1.4))));
+  $('ring').style.transform = `rotate(${t * 15}deg) scale(${0.8 + 0.16 * easeOutCubic(prog(t, 5.2, 0.8))})`;
+  $('ring').style.opacity = easeOutCubic(prog(t, 5.2, 0.6));
+  rise($('s2c').firstChild, t, 6.75, 120);
+  exitScene($('s2'), t, CUT2);
+
+  // ---- Scene 3: «Жасанды интеллектпен жұмыс істеуді үйреніп жүрмін» (voice 9.8 s) ----
+  s3words.forEach((w, i) => {
+    const k = prog(t, S3_TIMES[i], 0.65), e = easeOutCubic(k);
+    w.style.transform = `translateY(${(1 - e) * 115}%) rotate(${(1 - e) * 6}deg)`;
+    if (w.classList.contains('grad')) w.style.backgroundPosition = `${(t * 40) % 200}% 0`;
+  });
+  const settle = clamp((t - 14) * 2);
+  $('s3').style.transform = `translateY(${-settle * 10}px)`;
+
+  // Progress bars per segment
+  [[0, CUT1], [CUT1, CUT2], [CUT2, DURATION]].forEach(([a, b], i) => {
+    dotFills[i].style.transform = `scaleX(${clamp((t - a) / (b - a))})`;
+  });
+
+  panels(t);
+}
+
+window.renderFrame = render;
+window.DURATION = DURATION;
+
+function fit() {
+  const s = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
+  $('stage').style.transform = `scale(${s})`;
+}
+if (new URLSearchParams(location.search).has('export')) {
+  render(0);
+} else {
+  fit(); window.addEventListener('resize', fit);
+  const audio = $('audio'), btn = $('play');
+  let t0 = null, withSound = false;
+  btn.hidden = false;
+  btn.onclick = () => {
+    btn.hidden = true; withSound = true;
+    audio.currentTime = 0; audio.play().catch(() => { withSound = false; });
+  };
+  audio.addEventListener('ended', () => { audio.currentTime = 0; audio.play(); });
+  const loop = (now) => {
+    if (t0 === null) t0 = now;
+    render(withSound ? audio.currentTime : ((now - t0) / 1000) % DURATION);
+    requestAnimationFrame(loop);
+  };
+  document.fonts.ready.then(() => requestAnimationFrame(loop));
+}
+</script>
+</body>
+</html>
