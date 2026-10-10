@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сәлем, Claude</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-1: #1a0f0a;
+    --bg-2: #2b140b;
+    --accent: #d97757;
+    --accent-2: #f2a679;
+    --text: #fbf3ec;
+    --muted: #e9cdb9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #0c0705; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: "Inter Display", "Inter", system-ui, sans-serif; }
+
+  /* 1080×1920 stage, scaled down to fit the viewport in preview mode */
+  #stage {
+    position: relative; width: 1080px; height: 1920px; overflow: hidden;
+    background: radial-gradient(120% 80% at 50% 35%, var(--bg-2) 0%, var(--bg-1) 55%, #0c0705 100%);
+    transform-origin: center center;
+  }
+  .glow {
+    position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0;
+    will-change: transform, opacity;
+  }
+  #glowA { width: 900px; height: 900px; background: #d97757; left: -250px; top: 200px; }
+  #glowB { width: 800px; height: 800px; background: #a8452a; right: -300px; bottom: 150px; }
+
+  #particles { position: absolute; inset: 0; }
+  .p { position: absolute; border-radius: 50%; background: var(--accent-2); }
+
+  #burst { position: absolute; left: 540px; top: 640px; width: 0; height: 0; }
+  #burst svg { position: absolute; left: -130px; top: -130px; width: 260px; height: 260px; overflow: visible; }
+
+  .line { position: absolute; left: 0; right: 0; text-align: center; color: var(--text); white-space: nowrap; }
+  #l1 { top: 880px; font-size: 210px; font-weight: 800; letter-spacing: -6px; }
+  #l2 { top: 1160px; font-size: 104px; font-weight: 600; letter-spacing: -2px; }
+  #l3 { top: 1310px; font-size: 104px; font-weight: 600; letter-spacing: -2px; color: var(--muted); }
+
+  .ch, .w { display: inline-block; will-change: transform, opacity, filter; }
+  .w { margin: 0 14px; }
+  .claude {
+    position: relative;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 50%, var(--accent) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  #underline {
+    position: absolute; left: 0; bottom: -10px; height: 12px; width: 100%;
+    border-radius: 6px; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transform-origin: left center; transform: scaleX(0);
+  }
+  #flash { position: absolute; inset: 0; background: #fff1e6; opacity: 0; pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #0c0705; opacity: 1; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow" id="glowA"></div>
+  <div class="glow" id="glowB"></div>
+  <div id="particles"></div>
+
+  <div id="burst">
+    <svg viewBox="-100 -100 200 200" aria-hidden="true">
+      <g id="rays" fill="#d97757"></g>
+    </svg>
+  </div>
+
+  <div class="line" id="l1"></div>
+  <div class="line" id="l2"></div>
+  <div class="line" id="l3"></div>
+
+  <div id="flash"></div>
+  <div id="fade"></div>
+</div>
+
+<script>
+/*
+ * The whole animation is a pure function of time: render(t), t in seconds (0..10).
+ * In the browser it loops with requestAnimationFrame; for MP4 export the
+ * renderer calls window.renderFrame(t) once per frame and takes a screenshot.
+ */
+const DURATION = 10;
+const $ = (id) => document.getElementById(id);
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, start, dur) => clamp((t - start) / dur);
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+const easeInOutCubic = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOutBack = (x, s = 1.9) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2);
+const easeOutElastic = (x) => x === 0 || x === 1 ? x
+  : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+
+// Deterministic PRNG so every render is identical
+let seed = 7;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+// ---------- build DOM ----------
+// Line 1: "Сәлем!" split into letters
+const l1 = $('l1');
+const chars = [...'Сәлем!'].map((c) => {
+  const s = document.createElement('span');
+  s.className = 'ch'; s.textContent = c; l1.appendChild(s); return s;
+});
+
+// Lines 2–3: words
+function words(el, list) {
+  return list.map((w) => {
+    const s = document.createElement('span');
+    s.className = 'w'; s.textContent = w;
+    if (w === 'Claude') {
+      s.classList.add('claude');
+      const u = document.createElement('span'); u.id = 'underline'; s.appendChild(u);
+    }
+    el.appendChild(s); return s;
+  });
+}
+// "Claude" and "-пен" kept as separate spans so "Claude" can be highlighted
+const l2 = $('l2');
+const w2 = words(l2, ['Мен', 'Claude']);
+const pen = document.createElement('span');
+pen.className = 'w'; pen.textContent = '-пен'; pen.style.marginLeft = '-14px';
+l2.appendChild(pen); w2.push(pen);
+const w3 = words($('l3'), ['жұмыс', 'істеймін']);
+
+// Starburst rays (Claude-style spark)
+const rays = $('rays');
+const RAYS = 12;
+for (let i = 0; i < RAYS; i++) {
+  const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  const len = i % 2 ? 62 : 82;
+  r.setAttribute('x', -7); r.setAttribute('y', -len); r.setAttribute('width', 14);
+  r.setAttribute('height', len); r.setAttribute('rx', 7);
+  r.setAttribute('transform', `rotate(${(360 / RAYS) * i})`);
+  r.dataset.len = len;
+  rays.appendChild(r);
+}
+const rayEls = [...rays.children];
+
+// Particles
+const pWrap = $('particles');
+const particles = Array.from({ length: 46 }, () => {
+  const el = document.createElement('div'); el.className = 'p';
+  const size = 4 + rand() * 10;
+  el.style.width = el.style.height = size + 'px';
+  pWrap.appendChild(el);
+  return { el, x: rand() * 1080, y: rand() * 1920, speed: 20 + rand() * 60,
+           phase: rand() * Math.PI * 2, amp: 10 + rand() * 30, alpha: 0.15 + rand() * 0.5 };
+});
+
+// ---------- render ----------
+function render(t) {
+  // Global fade in / out
+  const fadeIn = 1 - easeOutCubic(prog(t, 0, 0.6));
+  const fadeOut = easeInOutCubic(prog(t, 9.3, 0.7));
+  $('fade').style.opacity = Math.max(fadeIn, fadeOut);
+
+  // Background glows drift slowly
+  const g = easeOutCubic(prog(t, 0, 1.5));
+  $('glowA').style.opacity = 0.35 * g;
+  $('glowA').style.transform = `translate(${Math.sin(t * 0.6) * 80}px, ${Math.cos(t * 0.5) * 60}px)`;
+  $('glowB').style.opacity = 0.28 * g;
+  $('glowB').style.transform = `translate(${Math.cos(t * 0.45) * 70}px, ${Math.sin(t * 0.7) * 90}px)`;
+
+  // Particles float upward
+  particles.forEach((p) => {
+    const y = ((p.y - p.speed * t) % 1960 + 1960) % 1960 - 20;
+    const x = p.x + Math.sin(t * 0.8 + p.phase) * p.amp;
+    p.el.style.transform = `translate(${x}px, ${y}px)`;
+    p.el.style.opacity = p.alpha * g;
+  });
+
+  // Starburst: grows in, rays pop one by one, then keeps rotating and pulsing
+  const bIn = prog(t, 0.2, 1.2);
+  const bScale = easeOutElastic(bIn) * (1 + 0.05 * Math.sin(t * 3));
+  const bump = Math.exp(-Math.pow((t - 5.2) * 4, 2)) * 0.25; // pulse when "Claude" appears
+  $('burst').style.transform = `rotate(${t * 22}deg) scale(${bScale + bump})`;
+  $('burst').style.opacity = clamp(bIn * 4);
+  rayEls.forEach((r, i) => {
+    const k = easeOutBack(prog(t, 0.3 + i * 0.06, 0.5));
+    r.setAttribute('height', r.dataset.len * k);
+    r.setAttribute('y', -r.dataset.len * k);
+  });
+
+  // Line 1: "Сәлем!" — letters drop in with blur, then a gentle wave
+  chars.forEach((c, i) => {
+    const k = prog(t, 1.2 + i * 0.09, 0.7);
+    const e = easeOutBack(k);
+    const wave = t > 2.4 ? Math.sin((t - 2.4) * 4 - i * 0.6) * 10 * clamp((t - 2.4) * 2) : 0;
+    const y = (1 - e) * 140 + wave;
+    const rot = (1 - easeOutCubic(k)) * (i % 2 ? 18 : -18);
+    c.style.opacity = easeOutCubic(clamp(k * 1.6));
+    c.style.filter = `blur(${(1 - easeOutCubic(k)) * 18}px)`;
+    c.style.transform = `translateY(${y}px) rotate(${rot}deg) scale(${0.4 + 0.6 * e})`;
+  });
+  // "!" gets an extra hop
+  const hop = Math.max(0, Math.sin((t - 2.2) * Math.PI / 0.45)) * (t > 2.2 && t < 2.65 ? 1 : 0);
+  chars[chars.length - 1].style.transform += ` translateY(${-hop * 40}px)`;
+
+  // Lines 2–3: words rise from below with blur
+  const animWord = (el, start, i) => {
+    const k = prog(t, start + i * 0.22, 0.75);
+    const e = easeOutCubic(k);
+    el.style.opacity = e;
+    el.style.filter = `blur(${(1 - e) * 14}px)`;
+    el.style.transform = `translateY(${(1 - e) * 90}px)`;
+  };
+  w2.forEach((w, i) => animWord(w, 3.6, i));
+  w3.forEach((w, i) => animWord(w, 5.6, i));
+
+  // "Claude": scale pop, shimmering gradient, underline sweep
+  const claude = w2[1];
+  const pop = Math.exp(-Math.pow((t - 4.8) * 5, 2)) * 0.12;
+  claude.style.transform += ` scale(${1 + pop})`;
+  claude.style.backgroundPosition = `${(t * 40) % 200}% 0`;
+  $('underline').style.transform = `scaleX(${easeInOutCubic(prog(t, 4.6, 0.7))})`;
+
+  // Soft flash when the full sentence lands
+  $('flash').style.opacity = Math.exp(-Math.pow((t - 6.6) * 6, 2)) * 0.08;
+
+  // Whole text block breathes gently during the hold
+  const hold = clamp((t - 6.8) * 1.5);
+  const lift = Math.sin((t - 6.8) * 1.6) * 8 * hold;
+  ['l1', 'l2', 'l3'].forEach((id, i) => {
+    $(id).style.transform = `translateY(${lift * (1 + i * 0.3)}px)`;
+  });
+}
+
+window.renderFrame = render;
+window.DURATION = DURATION;
+
+// Fit the 1080×1920 stage into the window
+function fit() {
+  const s = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
+  $('stage').style.transform = `scale(${s})`;
+}
+const exportMode = new URLSearchParams(location.search).has('export');
+if (!exportMode) {
+  fit(); window.addEventListener('resize', fit);
+  let t0 = null;
+  const loop = (now) => {
+    if (t0 === null) t0 = now;
+    render(((now - t0) / 1000) % DURATION);
+    requestAnimationFrame(loop);
+  };
+  document.fonts.ready.then(() => requestAnimationFrame(loop));
+} else {
+  render(0);
+}
+</script>
+</body>
+</html>
