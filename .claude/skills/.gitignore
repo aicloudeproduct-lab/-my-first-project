@@ -1,0 +1,3 @@
+# Bundled music for /brag is installed locally but not committed: its license is
+# unverified (see brag/assets/music/README.md), and this repository is public.
+brag/assets/music/*.mp3
