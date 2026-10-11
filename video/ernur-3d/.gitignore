@@ -3,3 +3,5 @@ work/audio/
 work/_video.mp4
 work/_render.log
 work/package-lock.json
+work/_tail.mp4
+work/_render_tail.log

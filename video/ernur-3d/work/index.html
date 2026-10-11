@@ -553,6 +553,9 @@ const s5 = makeWorld();
   s5.scene.add(s5.l1, s5.l2, s5.emoji);
   // particle burst: points sampled on the plate and food (used for the transition into scene 6)
   const meshes = []; s5.plate.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  // the plate dissolves into particles: give it its own material copies so fading it
+  // doesn't touch the shared gold used by the «AI» and «Рахмет!» texts
+  meshes.forEach((o) => { o.userData.op = o.material.opacity; o.material = o.material.clone(); o.material.transparent = true; });
   s5.plate.rotation.y = 25.3 * 0.3; s5.plate.updateMatrixWorld(true);
   const N = 2400, start = [];
   for (let i = 0; i < N; i++) {
@@ -566,7 +569,7 @@ s5.update = (t) => {
   s5.plate.rotation.y = Math.min(t, 25.3) * 0.3;
   const gone = eIn(prog(t, 25.3, 0.4));
   s5.plate.scale.setScalar(Math.max(0.001, 1 - gone * 0.15)); s5.plate.visible = gone < 1;
-  s5.plate.traverse((o) => { if (o.isMesh) { o.material.transparent = true; o.material.opacity = (o.material.color.getHex() === 0xf4ead2 ? 0.95 : 1) * (1 - gone); } });
+  s5.plate.traverse((o) => { if (o.isMesh) o.material.opacity = (o.userData.op ?? 1) * (1 - gone); });
   s5.steam.forEach((p) => {
     const k = ((t * p.sp + p.ph) % 1);
     p.s.position.set(p.x * (1 + k * 0.6) + Math.sin(t * 2 + p.ph * 9) * 0.12 * k, -0.45 + k * 2.4, p.z);
