@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ернұр — 3D</title>
+<style>
+  :root { --gold: #f2b84b; --gold-2: #ffd98a; --night: #070d1f; --yellow: #ffd54a; --text: #ffffff; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  body { display: grid; place-items: center; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; flex: none; background: var(--night); transform-origin: center; }
+  canvas { position: absolute; inset: 0; width: 1080px; height: 1920px; display: block; }
+  .ov { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+  #flash { background: radial-gradient(60% 40% at 50% 46%, #fff6dc 0%, #ffd98a 35%, rgba(242,184,75,.0) 100%); mix-blend-mode: screen; }
+  #flare { background: radial-gradient(70% 45% at 50% 42%, #ffffff 0%, #ffe7b0 30%, #f2b84b 55%, rgba(242,184,75,0) 100%); }
+  #fade { background: #000; }
+  #subs { position: absolute; left: 60px; right: 60px; top: 1530px; height: 220px; display: flex; align-items: center; justify-content: center;
+          text-align: center; font: 900 64px/1.18 "Inter Display", "Inter", system-ui, sans-serif; color: var(--text); letter-spacing: -0.5px;
+          text-shadow: 0 4px 0 rgba(0,0,0,.55), 0 0 24px rgba(0,0,0,.65); }
+  #subs .k { color: var(--yellow); }
+  #ig { position: absolute; left: 0; right: 0; top: 1290px; display: flex; justify-content: center; align-items: center; gap: 18px;
+        font: 800 48px "Inter Display", "Inter", sans-serif; color: #fff; opacity: 0; text-shadow: 0 4px 18px rgba(0,0,0,.6); }
+  #ig svg { width: 58px; height: 58px; }
+  #play { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.5); color: #fff;
+          font: 600 22px "Inter", system-ui, sans-serif; cursor: pointer; border: 0; z-index: 9; }
+  #play span { padding: 16px 28px; border-radius: 999px; background: #c8902e; }
+  #play[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl" width="1080" height="1920"></canvas>
+  <div class="ov" id="flash"></div>
+  <div id="ig"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd98a" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#ffd98a"/></svg><span id="igName"></span></div>
+  <div id="subs"></div>
+  <div class="ov" id="flare"></div>
+  <div class="ov" id="fade"></div>
+</div>
+<button id="play" hidden><span>▶ Дыбыспен ойнату</span></button>
+<audio id="audio" src="soundtrack.wav" preload="auto"></audio>
+
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+</script>
+<script type="module">
+/*
+ * Ернұр — 35 s vertical 3D video. render(t) is a pure function of time.
+ * Narration timing comes from voice.json (make_voice.py): subtitles and story beats follow
+ * the measured start of each spoken word.
+ * Photos: put photos/ernur.jpg and photos/university.jpg next to this file to use real photos;
+ * without them, matching 3D illustrations are drawn instead.
+ */
+import * as THREE from 'three';
+import { TTFLoader } from 'three/addons/loaders/TTFLoader.js';
+import { Font } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MeshSurfaceSampler } from 'three/addons/math/MeshSurfaceSampler.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const INSTAGRAM = '@nickname';          // ← Instagram никнейміңізді осында жазыңыз
+const W = 1080, H = 1920, DURATION = 35;
+const SCENES = [0, 4, 8, 14, 20, 26, 31, 35];
+const TR = { through: [3.6, 4.0], cube: [7.6, 8.35], flip: [13.6, 14.35], page: [19.75, 20.5], parts: [25.3, 27.0], flare: [30.45, 31.0] };
+
+// ---------- math ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, s, d) => clamp((t - s) / d);
+const lerp = (a, b, k) => a + (b - a) * k;
+const eOut = (x) => 1 - Math.pow(1 - x, 3);
+const eIn = (x) => x * x * x;
+const eInOut = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const eBack = (x, s = 1.7) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2);
+const eElastic = (x) => x === 0 || x === 1 ? x : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+const pulse = (t, at, w) => Math.exp(-Math.pow((t - at) / w, 2));
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const $ = (id) => document.getElementById(id);
+
+// ---------- renderer ----------
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.92;
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const rtOpts = { type: THREE.HalfFloatType, samples: 4 };
+const rtA = new THREE.WebGLRenderTarget(W, H, rtOpts);
+const rtB = new THREE.WebGLRenderTarget(W, H, rtOpts);
+
+// Display stage: a camera looking at a plane that exactly fills the frame
+const display = new THREE.Scene();
+display.background = new THREE.Color(0x02040a);
+const dispCam = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
+const QH = 2 * 10 * Math.tan(THREE.MathUtils.degToRad(20)), QW = QH * W / H;
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(1); composer.setSize(W, H);
+composer.addPass(new RenderPass(display, dispCam));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), 0.42, 0.55, 0.92);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ---------- shared assets ----------
+const voice = await (await fetch('voice.json')).json();
+const word = (line, i) => voice[line].words[i].t;
+// Inter is a CFF font: its outlines wind the other way, so the loader must reverse them
+const ttf = new TTFLoader(); ttf.reversed = true;
+const font = new Font(await new Promise((res) => ttf.load('fonts/InterDisplay-Black.otf', res)));
+await document.fonts.load('200px "Noto Color Emoji"').catch(() => {});
+
+const gold = new THREE.MeshStandardMaterial({ color: 0xf2b84b, metalness: 0.9, roughness: 0.26, envMapIntensity: 1.2 });
+const goldSoft = new THREE.MeshStandardMaterial({ color: 0xffd98a, metalness: 0.75, roughness: 0.32 });
+const navy = new THREE.MeshStandardMaterial({ color: 0x14224a, metalness: 0.3, roughness: 0.45 });
+const navyDeep = new THREE.MeshStandardMaterial({ color: 0x0b1430, metalness: 0.2, roughness: 0.6 });
+
+function text3d(str, { width, size = 1, depth = 0.25, mat = gold, bevel = true } = {}) {
+  const g = new TextGeometry(str, { font, size, depth, curveSegments: 8, bevelEnabled: bevel,
+    bevelThickness: size * 0.03, bevelSize: size * 0.022, bevelSegments: 3 });
+  g.computeBoundingBox(); g.center();
+  const m = new THREE.Mesh(g, mat);
+  if (width) { const w = g.boundingBox.max.x - g.boundingBox.min.x; m.scale.setScalar(width / w); }
+  return m;
+}
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8; return tx;
+}
+async function photoOr(path, fallback) {
+  try {
+    const r = await fetch(path); if (!r.ok) throw 0;
+    const img = await createImageBitmap(await r.blob(), { imageOrientation: 'flipY' });
+    const tx = new THREE.Texture(img); tx.colorSpace = THREE.SRGBColorSpace; tx.flipY = false; tx.needsUpdate = true;
+    tx.userData.aspect = img.width / img.height; return tx;
+  } catch { return fallback(); }
+}
+const softDot = canvasTex(128, 128, (g, w) => {
+  const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,240,200,.75)'); gr.addColorStop(1, 'rgba(255,220,150,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, w, w);
+});
+const bgTex = canvasTex(64, 512, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, 0, h);
+  gr.addColorStop(0, '#0c1838'); gr.addColorStop(0.55, '#070e24'); gr.addColorStop(1, '#03060f');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+});
+
+function makeWorld({ fog = 0.03 } = {}) {
+  const scene = new THREE.Scene();
+  scene.background = bgTex;
+  scene.environment = envTex;
+  scene.fog = new THREE.FogExp2(0x070e24, fog);
+  const amb = new THREE.AmbientLight(0x3a4f8f, 0.55); scene.add(amb);
+  const key = new THREE.DirectionalLight(0xffc874, 3.0); key.position.set(3, 4, 6); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x4a7dff, 2.2); rim.position.set(-4, 2, -5); scene.add(rim);
+  const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 200);
+  // floating dust for depth / parallax
+  const n = 260, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    pos.set([(rnd() - 0.5) * 16, (rnd() - 0.5) * 22, -12 + rnd() * 16], i * 3);
+    const warm = rnd() < 0.6; col.set(warm ? [1, 0.8, 0.45] : [0.45, 0.6, 1], i * 3);
+  }
+  const dg = new THREE.BufferGeometry();
+  dg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); dg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const dust = new THREE.Points(dg, new THREE.PointsMaterial({ size: 0.06, map: softDot, vertexColors: true, transparent: true,
+    opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(dust);
+  return { scene, camera, amb, key, rim, dust };
+}
+function glowSprite(color, scale, opacity = 1) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDot, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
+  s.scale.setScalar(scale); return s;
+}
+function roundCard(w, h, d, tex, frameMat = gold) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 4, Math.min(w, h) * 0.08), frameMat));
+  if (tex) {
+    const pw = w * 0.9, ph = h - w * 0.1;
+    if (tex.userData.aspect) {   // real photo: crop to fill the card ("cover")
+      const a = tex.userData.aspect / (pw / ph);
+      if (a > 1) { tex.repeat.set(1 / a, 1); tex.offset.set((1 - 1 / a) / 2, 0); } else { tex.repeat.set(1, a); tex.offset.set(0, (1 - a) / 2); }
+    }
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, metalness: 0, envMapIntensity: 0.25, color: 0xb8b8b8 }));
+    p.position.z = d / 2 + 0.002; g.add(p);
+  }
+  return g;
+}
+
+// ---------- illustrations (used when no photo is given) ----------
+function portraitIllustration() {
+  return canvasTex(720, 940, (g, w, h) => {
+    const bg = g.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#1d3270'); bg.addColorStop(1, '#0a132e');
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    const halo = g.createRadialGradient(w / 2, h * 0.38, 20, w / 2, h * 0.38, w * 0.6);
+    halo.addColorStop(0, 'rgba(255,210,130,.55)'); halo.addColorStop(1, 'rgba(255,210,130,0)'); g.fillStyle = halo; g.fillRect(0, 0, w, h);
+    // shoulders
+    const sh = g.createLinearGradient(0, h * 0.62, 0, h); sh.addColorStop(0, '#f2b84b'); sh.addColorStop(1, '#a8701f');
+    g.fillStyle = sh; g.beginPath(); g.ellipse(w / 2, h * 1.02, w * 0.46, h * 0.36, 0, Math.PI, 0); g.fill();
+    // neck + head
+    const skin = g.createLinearGradient(w * 0.3, 0, w * 0.7, 0); skin.addColorStop(0, '#e9b98c'); skin.addColorStop(1, '#c98f62');
+    g.fillStyle = skin; g.fillRect(w * 0.43, h * 0.5, w * 0.14, h * 0.14);
+    g.beginPath(); g.ellipse(w / 2, h * 0.4, w * 0.2, h * 0.17, 0, 0, Math.PI * 2); g.fill();
+    // hair
+    g.fillStyle = '#1b130e'; g.beginPath(); g.ellipse(w / 2, h * 0.3, w * 0.215, h * 0.1, 0, Math.PI, 0); g.fill();
+    g.beginPath(); g.ellipse(w * 0.5, h * 0.29, w * 0.2, h * 0.07, -0.1, 0, Math.PI); g.fill();
+    // smile + eyes
+    g.fillStyle = '#2a1a12'; g.beginPath(); g.ellipse(w * 0.43, h * 0.41, 10, 7, 0, 0, Math.PI * 2); g.ellipse(w * 0.57, h * 0.41, 10, 7, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#7a3a24'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.arc(w / 2, h * 0.445, w * 0.07, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+    g.font = '900 64px "Inter Display", sans-serif'; g.fillStyle = '#ffd98a'; g.textAlign = 'center'; g.fillText('ЕРНҰР', w / 2, h * 0.93);
+  });
+}
+function universityIllustration() {
+  return canvasTex(900, 620, (g, w, h) => {
+    const sky = g.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#22397a'); sky.addColorStop(1, '#0b1533');
+    g.fillStyle = sky; g.fillRect(0, 0, w, h);
+    const sun = g.createRadialGradient(w * 0.75, h * 0.2, 5, w * 0.75, h * 0.2, w * 0.45);
+    sun.addColorStop(0, 'rgba(255,214,140,.7)'); sun.addColorStop(1, 'rgba(255,214,140,0)'); g.fillStyle = sun; g.fillRect(0, 0, w, h);
+    const stone = '#e9dcc0', shade = '#b8a684';
+    g.fillStyle = stone; g.fillRect(w * 0.12, h * 0.45, w * 0.76, h * 0.38);           // body
+    g.beginPath(); g.moveTo(w * 0.08, h * 0.45); g.lineTo(w * 0.5, h * 0.2); g.lineTo(w * 0.92, h * 0.45); g.closePath(); g.fill(); // pediment
+    g.fillStyle = shade; g.fillRect(w * 0.08, h * 0.44, w * 0.84, h * 0.03); g.fillRect(w * 0.1, h * 0.82, w * 0.8, h * 0.04);
+    for (let i = 0; i < 8; i++) { g.fillStyle = shade; g.fillRect(w * (0.17 + i * 0.093), h * 0.5, w * 0.03, h * 0.31); }
+    g.fillStyle = '#f2b84b'; g.beginPath(); g.arc(w * 0.5, h * 0.36, h * 0.045, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#0b1533'; g.fillRect(0, h * 0.9, w, h * 0.1);
+    g.font = '800 46px "Inter Display", sans-serif'; g.fillStyle = '#ffd98a'; g.textAlign = 'center';
+    g.fillText('Бөкетов университеті', w / 2, h * 0.975);
+  });
+}
+const portraitTex = await photoOr('photos/ernur.jpg', portraitIllustration);
+const uniTex = await photoOr('photos/university.jpg', universityIllustration);
+
+// ================= Scene 1 — «Ассалаумағалейкум!» / Ернұр =================
+const s1 = makeWorld({ fog: 0.02 });
+{
+  const { scene } = s1;
+  s1.gate = new THREE.Mesh(new THREE.PlaneGeometry(14, 10), new THREE.MeshBasicMaterial({ map: softDot, color: 0xffc874, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9 }));
+  s1.gate.position.z = -4; scene.add(s1.gate);
+  s1.salem = text3d('Ассалаумағалейкум!', { width: 3.3, depth: 0.12, mat: goldSoft }); s1.salem.position.set(0, 1.35, -0.2); scene.add(s1.salem);
+  s1.name = text3d('Ернұр', { width: 3.2, depth: 0.45 }); scene.add(s1.name);
+  s1.sb = s1.salem.scale.x; s1.nb = s1.name.scale.x;
+  // sparkles orbiting the name
+  const n = 240, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  s1.sp = [];
+  for (let i = 0; i < n; i++) s1.sp.push({ r: 1.6 + rnd() * 1.8, a: rnd() * 6.28, y: (rnd() - 0.5) * 3.4, s: 0.2 + rnd() * 0.5, ph: rnd() * 6.28 });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  s1.spark = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.09, map: softDot, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(s1.spark);
+}
+s1.update = (t) => {
+  const open = eOut(prog(t, 0.1, 1.4));
+  s1.gate.scale.set(lerp(0.15, 1, open), lerp(0.02, 1, open), 1);
+  s1.gate.material.opacity = 0.16 * open;
+  s1.key.intensity = 3.2 * eOut(prog(t, 0.2, 1.6)); s1.rim.intensity = 2.2 * open; s1.amb.intensity = lerp(0.05, 0.5, open);
+  const sk = eOut(prog(t, 0.75, 0.7));
+  s1.salem.scale.set(s1.sb, s1.sb * sk, s1.sb); s1.salem.material.opacity = 1;
+  s1.salem.position.y = 1.35 + (1 - sk) * 0.3;
+  const nk = prog(t, 1.0, 1.6);
+  s1.name.rotation.y = (1 - eBack(nk, 1.2)) * -Math.PI * 1.5 + Math.sin(t * 1.3) * 0.08 * prog(t, 2.6, 0.5);
+  s1.name.rotation.x = Math.sin(t * 0.9) * 0.05;
+  s1.name.scale.setScalar(s1.nb * lerp(0.4, 1, eOut(nk)));
+  const pa = s1.spark.geometry.attributes.position, ca = s1.spark.geometry.attributes.color;
+  s1.sp.forEach((p, i) => {
+    const a = p.a + t * p.s;
+    pa.setXYZ(i, Math.cos(a) * p.r, p.y + Math.sin(t * 0.7 + p.ph) * 0.15, Math.sin(a) * p.r * 0.6);
+    const tw = (0.5 + 0.5 * Math.sin(t * 4 + p.ph)) * open;
+    ca.setXYZ(i, tw, tw * 0.8, tw * 0.45);
+  });
+  pa.needsUpdate = ca.needsUpdate = true;
+  // dolly in, then fly through the name (zoom-through)
+  const z = lerp(13, 9.5, eOut(prog(t, 0, 3.4)));
+  const through = eIn(prog(t, TR.through[0], TR.through[1] - TR.through[0]));
+  s1.camera.position.set(Math.sin(t * 0.6) * 0.3 * (1 - through), 0.1, lerp(z, -1.2, through));
+  s1.camera.lookAt(0, 0.1, -10);
+};
+
+// ================= Scene 2 — photo card + «18» =================
+const s2 = makeWorld();
+{
+  s2.card = roundCard(2.3, 3.0, 0.12, portraitTex);
+  s2.cardWrap = new THREE.Group(); s2.cardWrap.add(s2.card); s2.cardWrap.position.set(-0.45, 0.75, 0); s2.scene.add(s2.cardWrap);
+  s2.halo = glowSprite(0xffc874, 5, 0.22); s2.halo.position.set(-0.45, 0.8, -1.5); s2.scene.add(s2.halo);
+  s2.age = text3d('18', { width: 1.6, depth: 0.5 }); s2.age.position.set(1.05, -1.25, 0.9); s2.ab = s2.age.scale.x; s2.scene.add(s2.age);
+}
+s2.update = (t) => {
+  const a = eOut(prog(t, 4.05, 0.9));
+  s2.cardWrap.position.y = 0.75 + (1 - a) * -1.2 + Math.sin(t * 1.4) * 0.07;
+  s2.cardWrap.rotation.set(Math.sin(t * 1.1) * 0.04, 0.24 + (1 - a) * -0.9 + Math.sin(t * 0.8) * 0.06, 0);
+  s2.card.scale.setScalar(lerp(0.6, 1, a));
+  // «18» spins in, landing face-on as «он сегіз» is spoken
+  const sp = eOut(prog(t, word(1, 3) - 1.6, 2.0));
+  s2.age.rotation.y = (1 - sp) * Math.PI * 6 + Math.sin(t * 1.6) * 0.12;
+  s2.age.scale.setScalar(s2.ab * lerp(0.2, 1, eOut(prog(t, 4.4, 0.8))) * (1 + 0.08 * pulse(t, word(1, 4), 0.12)));
+  s2.age.position.y = -1.25 + Math.sin(t * 1.7 + 1) * 0.08;
+  const z = lerp(4.2, 9.5, eOut(prog(t, 4.0, 1.3)));
+  s2.camera.position.set(Math.sin((t - 4) * 0.55) * 0.45, 0.15, z);
+  s2.camera.lookAt(0, 0.2, 0);
+};
+
+// ================= Scene 3 — map of Kazakhstan, Karaganda, university =================
+const KZ = [[46.7,49.0],[48.0,51.0],[50.5,51.7],[53.0,51.5],[55.0,50.8],[57.5,50.9],[59.5,50.6],[61.4,51.3],[60.0,52.0],[61.0,53.0],[62.0,54.0],[65.0,54.6],[68.5,55.4],[71.0,54.2],[73.5,54.0],[76.0,54.2],[77.5,53.4],[79.5,51.0],[81.0,50.8],[83.5,51.0],[85.0,49.8],[87.3,49.1],[85.5,48.4],[85.5,47.0],[83.0,47.2],[82.3,45.5],[80.0,45.0],[80.2,43.0],[79.0,42.8],[76.0,43.0],[74.5,42.9],[71.0,42.8],[70.0,41.5],[68.5,40.6],[66.5,41.2],[66.0,42.9],[62.0,43.5],[59.5,45.5],[58.5,45.6],[56.0,45.0],[55.5,41.3],[53.0,42.1],[52.5,41.8],[52.8,42.8],[51.3,43.2],[50.8,44.5],[51.3,45.3],[53.0,45.3],[53.2,46.2],[51.2,47.0],[49.2,46.4],[48.0,47.7]];
+const geo = ([lon, lat]) => [(lon - 67) * 0.085, (lat - 48) * 0.13];
+const s3 = makeWorld({ fog: 0.025 });
+{
+  const shape = new THREE.Shape(KZ.map((p) => new THREE.Vector2(...geo(p))));
+  const mg = new THREE.ExtrudeGeometry(shape, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2 });
+  s3.map = new THREE.Group();
+  s3.map.add(new THREE.Mesh(mg, new THREE.MeshStandardMaterial({ color: 0x1b3478, metalness: 0.35, roughness: 0.4, emissive: 0x0a1640 })));
+  const edge = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(KZ.map((p) => new THREE.Vector3(...geo(p), 0.2))),
+    new THREE.LineBasicMaterial({ color: 0xffc874 }));
+  s3.map.add(edge);
+  const glowPlane = new THREE.Mesh(new THREE.PlaneGeometry(6, 4), new THREE.MeshBasicMaterial({ map: softDot, color: 0x3a6bff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glowPlane.position.z = -0.2; s3.map.add(glowPlane);
+  s3.mapWrap = new THREE.Group(); s3.mapWrap.add(s3.map); s3.mapWrap.rotation.x = -0.95; s3.mapWrap.position.y = -0.6; s3.scene.add(s3.mapWrap);
+  const [kx, ky] = geo([73.1, 49.8]);
+  s3.pin = new THREE.Group();
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 32, 16), gold); head.position.z = 0.42;
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.32, 24), gold); cone.rotation.x = -Math.PI / 2; cone.position.z = 0.2;
+  s3.pin.add(head, cone, (() => { const g = glowSprite(0xffd98a, 0.9, 0.8); g.position.z = 0.42; return g; })());
+  s3.pin.position.set(kx, ky, 0.19); s3.map.add(s3.pin);
+  s3.ring = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.13, 48), new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  s3.ring.position.set(kx, ky, 0.2); s3.map.add(s3.ring);
+  s3.label = text3d('Қарағанды', { width: 1.25, depth: 0.06, mat: goldSoft, bevel: false }); s3.scene.add(s3.label);
+  s3.uni = roundCard(2.1, 1.45, 0.08, uniTex); s3.scene.add(s3.uni);
+  s3.badge = new THREE.Group();
+  const pill = new THREE.Mesh(new RoundedBoxGeometry(1.35, 0.55, 0.16, 4, 0.2), navy);
+  const bt = text3d('2-курс', { width: 1.0, depth: 0.12 }); bt.position.z = 0.1;
+  s3.badge.add(pill, bt); s3.scene.add(s3.badge);
+}
+s3.update = (t) => {
+  s3.map.rotation.z = Math.sin(t * 0.3) * 0.03;
+  // pin drops on «Қарағандыдағы»
+  const tp = word(2, 2) - 0.1;
+  const d = prog(t, tp, 0.7);
+  s3.pin.position.z = 0.19 + (1 - eBack(d, 2.2)) * 3.0 * (d < 1 ? 1 : 0);
+  s3.pin.visible = t >= tp;
+  const r = prog(t, tp + 0.5, 1.2);
+  s3.ring.scale.setScalar(1 + eOut(r) * 7); s3.ring.material.opacity = r > 0 && r < 1 ? 1 - r : 0;
+  // label, university card (on «Бөкетов»), «2-курс» badge (on «екінші»)
+  const pinWorld = new THREE.Vector3(); s3.mapWrap.updateMatrixWorld(true); s3.pin.getWorldPosition(pinWorld);
+  const lk = eOut(prog(t, tp + 0.35, 0.5));
+  s3.label.position.set(pinWorld.x + 0.25, pinWorld.y + 0.62 + (1 - lk) * 0.2, pinWorld.z + 0.2);
+  s3.label.scale.setScalar(s3.label.userData.b ?? (s3.label.userData.b = s3.label.scale.x));
+  s3.label.scale.multiplyScalar(Math.max(0.001, lk));
+  const u = eBack(prog(t, word(2, 3) - 0.1, 0.9), 1.3);
+  s3.uni.position.set(lerp(pinWorld.x, -0.3, eOut(prog(t, word(2, 3) - 0.1, 0.9))), lerp(pinWorld.y, 2.05, u) + Math.sin(t * 1.3) * 0.05, lerp(pinWorld.z, 0.6, u));
+  s3.uni.rotation.set(0.05, 0.12 + Math.sin(t * 0.7) * 0.05, -0.03);
+  s3.uni.scale.setScalar(Math.max(0.001, u));
+  const b = eElastic(prog(t, word(2, 5) - 0.1, 1.0));
+  s3.badge.position.set(1.05, 1.2 + Math.sin(t * 1.6) * 0.05, 1.3);
+  s3.badge.rotation.set(0, -0.25 + (1 - clamp(b)) * 1.5, 0.05);
+  s3.badge.scale.setScalar(Math.max(0.001, b));
+  // camera: dolly in and drift toward Karaganda after the pin lands
+  const fk = eInOut(prog(t, tp, 2.5));
+  s3.camera.position.set(lerp(0, 0.35, fk) + Math.sin(t * 0.4) * 0.15, lerp(0.4, 0.6, fk), lerp(9.0, 7.6, eOut(prog(t, 8, 6))));
+  s3.camera.lookAt(lerp(0, 0.3, fk), lerp(0.1, 0.5, fk), 0);
+};
+
+// ================= Scene 4 — book, dombra, headphones carousel =================
+function bookModel() {
+  const g = new THREE.Group();
+  const cover = new THREE.Mesh(new RoundedBoxGeometry(0.95, 1.2, 0.2, 3, 0.03), new THREE.MeshStandardMaterial({ color: 0x8a2b1e, roughness: 0.5, metalness: 0.1 }));
+  const pages = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.12, 0.16), new THREE.MeshStandardMaterial({ color: 0xf3e9d2, roughness: 0.8 }));
+  pages.position.x = 0.04;
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.97, 0.08, 0.21), gold); band.position.y = 0.38;
+  const band2 = band.clone(); band2.position.y = -0.38;
+  g.add(cover, pages, band, band2); return g;
+}
+function dombraModel() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0xb5793a, roughness: 0.42, metalness: 0.05 });
+  const pts = []; for (let i = 0; i <= 24; i++) { const a = i / 24; pts.push(new THREE.Vector2(Math.sin(Math.PI * a) * (0.38 - 0.12 * a) + 0.001, -a * 0.95)); }
+  const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 48), wood); body.scale.z = 0.45; body.position.y = 0.05;
+  const top = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshStandardMaterial({ color: 0xd9a462, roughness: 0.5 }));
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.25, 0.07), wood); neck.position.y = 0.66;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.24, 0.08), new THREE.MeshStandardMaterial({ color: 0x6b3f1c, roughness: 0.5 })); head.position.y = 1.38;
+  g.add(body, neck, head);
+  for (let i = 0; i < 6; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.012, 0.075), gold); f.position.y = 0.2 + i * 0.17; g.add(f); }
+  for (const x of [-0.022, 0.022]) { const s = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 2.0, 6), goldSoft); s.position.set(x, 0.42, 0.06); g.add(s); }
+  void top; g.scale.setScalar(0.8); g.position.y = -0.15; return g;
+}
+function headphonesModel() {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1a1f2e, roughness: 0.35, metalness: 0.6 });
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.055, 16, 48, Math.PI), gold);
+  const pad = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.075, 12, 48, Math.PI * 0.6), dark); pad.rotation.z = Math.PI * 0.2;
+  g.add(band, pad);
+  for (const s of [-1, 1]) {
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.18, 40), dark); cup.rotation.z = Math.PI / 2; cup.position.set(s * 0.58, -0.08, 0);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.025, 12, 40), gold); ring.rotation.y = Math.PI / 2; ring.position.set(s * 0.68, -0.08, 0);
+    g.add(cup, ring);
+  }
+  g.position.y = 0.05; return g;
+}
+const s4 = makeWorld();
+{
+  s4.carousel = new THREE.Group(); s4.carousel.position.set(0, 0.35, 0); s4.scene.add(s4.carousel);
+  const items = [[bookModel(), 'Кітап'], [dombraModel(), 'Домбыра'], [headphonesModel(), 'Музыка']];
+  s4.cards = items.map(([model, label], i) => {
+    const a = (i * 2 * Math.PI) / 3;
+    const holder = new THREE.Group();
+    holder.position.set(Math.sin(a) * 1.9, 0, Math.cos(a) * 1.9); holder.rotation.y = a;
+    const card = new THREE.Mesh(new RoundedBoxGeometry(1.7, 2.45, 0.1, 4, 0.14), navy.clone());
+    const rim = new THREE.Mesh(new RoundedBoxGeometry(1.76, 2.51, 0.06, 4, 0.16), gold); rim.position.z = -0.04;
+    model.position.z = 0.35; model.position.y += 0.18;
+    const lab = text3d(label, { width: label.length > 5 ? 1.3 : 1.0, depth: 0.08 }); lab.position.set(0, -0.92, 0.12);
+    const glow = glowSprite(0xffc874, 2.6, 0); glow.position.z = -0.3;
+    holder.add(glow, rim, card, model, lab); s4.carousel.add(holder);
+    return { holder, card, model, glow, a };
+  });
+  s4.times = [word(3, 2), word(3, 4), word(3, 7)];  // «кітап», «домбыра», «музыка»
+}
+s4.update = (t) => {
+  // spin in, then bring each card to the front as it is named
+  let ang = -Math.PI * 4 / 3 * (1 - eOut(prog(t, 14.0, 1.0)));
+  s4.times.slice(1).forEach((tw, i) => { ang += (2 * Math.PI / 3) * eInOut(prog(t, tw - 0.45, 0.6)); void i; });
+  s4.carousel.rotation.y = -ang;
+  const active = t < s4.times[1] - 0.2 ? 0 : t < s4.times[2] - 0.2 ? 1 : 2;
+  s4.cards.forEach((c, i) => {
+    const on = i === active ? eOut(prog(t, (i === 0 ? 14.6 : s4.times[i] - 0.2), 0.4)) : 0;
+    c.holder.scale.setScalar(1 + 0.08 * on);
+    c.glow.material.opacity = 0.55 * on;
+    c.card.material.emissive = new THREE.Color(0x2a3f86).multiplyScalar(0.35 + 0.65 * on);
+    c.model.rotation.y = Math.sin(t * 1.2 + i) * 0.5 + (i === 0 ? 0.4 : 0);
+    c.model.rotation.x = Math.sin(t * 0.9 + i) * 0.12;
+  });
+  s4.camera.position.set(Math.sin(t * 0.5) * 0.4, 0.75, lerp(8.2, 7.0, eOut(prog(t, 14, 6))));
+  s4.camera.lookAt(0, 0.3, 0);
+};
+
+// ================= Scene 5 — steaming plate, «Күйеу бала керек пе? 😉» =================
+const s5 = makeWorld();
+{
+  s5.plate = new THREE.Group(); s5.plate.position.set(0, -0.7, 0); s5.scene.add(s5.plate);
+  const prof = [[0, 0], [1.0, 0], [1.2, 0.07], [1.42, 0.2], [1.5, 0.23]].map(([x, y]) => new THREE.Vector2(x, y));
+  const plateMesh = new THREE.Mesh(new THREE.LatheGeometry(prof, 64), new THREE.MeshStandardMaterial({ color: 0x8f8a80, roughness: 0.6, metalness: 0.05, envMapIntensity: 0.35, side: THREE.DoubleSide }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.48, 0.025, 12, 64), gold); rim.rotation.x = Math.PI / 2; rim.position.y = 0.225;
+  s5.plate.add(plateMesh, rim);
+  s5.food = new THREE.Group(); s5.plate.add(s5.food);
+  const dough = new THREE.MeshStandardMaterial({ color: 0xf2e2bd, roughness: 0.55 });
+  const meat = new THREE.MeshStandardMaterial({ color: 0x7a3f22, roughness: 0.6 });
+  const onion = new THREE.MeshStandardMaterial({ color: 0xf4ead2, roughness: 0.4, transparent: true, opacity: 0.95 });
+  for (let i = 0; i < 16; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.025, 0.34), dough);
+    const r = rnd() * 0.85, a = rnd() * 6.28; m.position.set(Math.cos(a) * r, 0.05 + rnd() * 0.06, Math.sin(a) * r);
+    m.rotation.set((rnd() - 0.5) * 0.4, rnd() * 3, (rnd() - 0.5) * 0.4); s5.food.add(m);
+  }
+  for (let i = 0; i < 12; i++) {
+    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12 + rnd() * 0.05), meat);
+    const r = rnd() * 0.55, a = rnd() * 6.28; m.position.set(Math.cos(a) * r, 0.16 + rnd() * 0.08, Math.sin(a) * r); m.scale.y = 0.7; s5.food.add(m);
+  }
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.018, 8, 24), onion);
+    const r = rnd() * 0.6, a = rnd() * 6.28; m.position.set(Math.cos(a) * r, 0.27, Math.sin(a) * r); m.rotation.x = Math.PI / 2 + (rnd() - 0.5); s5.food.add(m);
+  }
+  s5.steam = Array.from({ length: 22 }, () => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDot, color: 0xfff3e0, transparent: true, depthWrite: false, opacity: 0 }));
+    s5.scene.add(s); return { s, x: (rnd() - 0.5) * 1.4, z: (rnd() - 0.5) * 0.8, ph: rnd(), sp: 0.25 + rnd() * 0.2 };
+  });
+  s5.l1 = text3d('Күйеу бала', { width: 2.3, depth: 0.28 }); s5.l2 = text3d('керек пе?', { width: 1.75, depth: 0.28 });
+  s5.b1 = s5.l1.scale.x; s5.b2 = s5.l2.scale.x;
+  const emoji = canvasTex(256, 256, (g) => { g.font = '200px "Noto Color Emoji"'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('😉', 128, 140); });
+  s5.emoji = new THREE.Sprite(new THREE.SpriteMaterial({ map: emoji, transparent: true }));
+  s5.scene.add(s5.l1, s5.l2, s5.emoji);
+  // particle burst: points sampled on the plate and food (used for the transition into scene 6)
+  const meshes = []; s5.plate.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  s5.plate.rotation.y = 25.3 * 0.3; s5.plate.updateMatrixWorld(true);
+  const N = 2400, start = [];
+  for (let i = 0; i < N; i++) {
+    const m = meshes[i < 1300 ? 0 : 1 + (i % (meshes.length - 1))];
+    const sampler = m.userData.sampler ?? (m.userData.sampler = new MeshSurfaceSampler(m).build());
+    const v = new THREE.Vector3(); sampler.sample(v); v.applyMatrix4(m.matrixWorld); start.push(v);
+  }
+  s5.burstStart = start;
+}
+s5.update = (t) => {
+  s5.plate.rotation.y = Math.min(t, 25.3) * 0.3;
+  const gone = eIn(prog(t, 25.3, 0.4));
+  s5.plate.scale.setScalar(Math.max(0.001, 1 - gone * 0.15)); s5.plate.visible = gone < 1;
+  s5.plate.traverse((o) => { if (o.isMesh) { o.material.transparent = true; o.material.opacity = (o.material.color.getHex() === 0xf4ead2 ? 0.95 : 1) * (1 - gone); } });
+  s5.steam.forEach((p) => {
+    const k = ((t * p.sp + p.ph) % 1);
+    p.s.position.set(p.x * (1 + k * 0.6) + Math.sin(t * 2 + p.ph * 9) * 0.12 * k, -0.45 + k * 2.4, p.z);
+    p.s.scale.setScalar(0.25 + k * 0.6);
+    p.s.material.opacity = Math.sin(Math.PI * k) * 0.1 * (1 - gone);
+  });
+  // «Күйеу бала керек пе? 😉» jumps in on «күйеу»
+  const tk = word(5, 0) - 0.08;
+  const j1 = eElastic(prog(t, tk, 1.0)), j2 = eElastic(prog(t, tk + 0.15, 1.0)), je = eElastic(prog(t, tk + 0.35, 1.0));
+  const hop = (ph) => Math.abs(Math.sin((t - tk) * 5 + ph)) * 0.07 * clamp((t - tk - 0.8) * 2);
+  const out = 1 - eIn(prog(t, 25.0, 0.35));
+  s5.l1.position.set(0, 2.05 + (1 - j1) * 1.2 + hop(0), 0.4); s5.l1.scale.setScalar(s5.b1 * Math.max(0.001, j1 * out));
+  s5.l2.position.set(-0.3, 1.45 + (1 - j2) * 1.2 + hop(1), 0.4); s5.l2.scale.setScalar(s5.b2 * Math.max(0.001, j2 * out));
+  s5.l1.rotation.x = s5.l2.rotation.x = -0.28;
+  s5.emoji.position.set(0.95, 1.48 + hop(2), 0.5); s5.emoji.scale.setScalar(0.62 * Math.max(0.001, je * out));
+  s5.emoji.material.rotation = Math.sin((t - tk) * 6) * 0.25 * clamp(t - tk);
+  s5.camera.position.copy(s5camPos(t));
+  s5.camera.lookAt(0, 0.35, 0);
+};
+const s5camPos = (t) => new THREE.Vector3(Math.sin((Math.min(t, 26) - 20) * 0.25) * 1.0, 2.0, 7.8 - prog(t, 20, 6) * 0.6);
+
+// ================= Scene 6 — neural network, code, «AI» =================
+const s6 = makeWorld({ fog: 0.02 });
+{
+  const layers = [[1.25, 3], [0.35, 5], [-0.55, 5], [-1.45, 3]];
+  s6.nodes = []; layers.forEach(([y, n]) => { for (let i = 0; i < n; i++) s6.nodes.push(new THREE.Vector3((i - (n - 1) / 2) * (3.0 / Math.max(n - 1, 1)) * (n === 3 ? 0.6 : 1), y, (rnd() - 0.5) * 0.8)); });
+  s6.edges = [];
+  let o = 0; for (let L = 0; L < layers.length - 1; L++) { const a = layers[L][1], b = layers[L + 1][1];
+    for (let i = 0; i < a; i++) for (let j = 0; j < b; j++) s6.edges.push([o + i, o + a + j]); o += a; }
+  s6.net = new THREE.Group(); s6.net.position.y = 0.1; s6.scene.add(s6.net);
+  s6.nodeMeshes = s6.nodes.map((p) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 24, 16), new THREE.MeshStandardMaterial({ color: 0xffd98a, emissive: 0xf2b84b, emissiveIntensity: 1.6, metalness: 0.3, roughness: 0.3, transparent: true }));
+    m.position.copy(p); s6.net.add(m); return m;
+  });
+  const ep = []; s6.edges.forEach(([a, b]) => ep.push(s6.nodes[a], s6.nodes[b]));
+  s6.lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ep), new THREE.LineBasicMaterial({ color: 0x5b8cff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  s6.net.add(s6.lines);
+  s6.pulses = Array.from({ length: 36 }, () => { const s = glowSprite(0xffe2a0, 0.28, 0); s6.net.add(s); return { s, e: Math.floor(rnd() * s6.edges.length), ph: rnd(), sp: 0.5 + rnd() * 0.6 }; });
+  const code = ['const brain = new Network([3, 5, 5, 3]);', 'for (const batch of data) {', '  const y = brain.forward(batch.x);', '  loss += mse(y, batch.label);', '}', 'brain.backward(loss);',
+    'optimizer.step(0.001);', 'def learn(self, text):', '    tokens = tokenize(text)', '    return self.model(tokens)', 'print("Сәлем, AI!")', 'epoch += 1  # үйреніп жүрмін'];
+  const codeTex = canvasTex(768, 2048, (g, w, h) => {
+    g.font = '600 34px "DejaVu Sans Mono", monospace';
+    for (let y = 60, i = 0; y < h; y += 58, i++) { const l = code[i % code.length]; g.fillStyle = i % 5 === 0 ? 'rgba(255,214,140,.85)' : 'rgba(120,160,255,.75)'; g.fillText(l, 24, y); }
+  });
+  codeTex.wrapS = codeTex.wrapT = THREE.RepeatWrapping;
+  s6.codes = [-1, 1].map((s) => {
+    const tx = codeTex.clone(); tx.needsUpdate = true; tx.repeat.set(1, 0.5);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 8.5), new THREE.MeshBasicMaterial({ map: tx, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.position.set(s * 2.6, 0, -3.5); m.rotation.y = -s * 0.45; s6.scene.add(m); return m;
+  });
+  s6.ai = text3d('AI', { width: 2.1, depth: 0.6 }); s6.ab = s6.ai.scale.x; s6.scene.add(s6.ai);
+  s6.aiGlow = glowSprite(0xffc874, 4.5, 0); s6.aiGlow.position.set(0, 2.55, -0.8); s6.scene.add(s6.aiGlow);
+  s6.flare = glowSprite(0xfff1cc, 1, 0); s6.flare.position.set(0, 0.4, 2); s6.scene.add(s6.flare);
+}
+s6.update = (t) => {
+  const appear = eOut(prog(t, 26.6, 0.8));
+  s6.nodeMeshes.forEach((m, i) => { m.material.opacity = appear; m.scale.setScalar(1 + 0.25 * Math.sin(t * 3 + i)); });
+  s6.lines.material.opacity = 0.45 * eOut(prog(t, 26.9, 0.8));
+  s6.pulses.forEach((p) => {
+    const [a, b] = s6.edges[p.e]; const k = (t * p.sp + p.ph) % 1;
+    p.s.position.lerpVectors(s6.nodes[a], s6.nodes[b], k); p.s.material.opacity = Math.sin(Math.PI * k) * eOut(prog(t, 27.2, 0.6));
+  });
+  s6.codes.forEach((m, i) => { m.material.map.offset.y = -t * 0.06 * (i ? 1.2 : 1); m.material.opacity = 0.55 * eOut(prog(t, 26.8, 1.0)); });
+  // «AI» tumbles in on «жасанды»
+  const ak = prog(t, word(6, 1) - 0.15, 1.1);
+  s6.ai.position.set(0, 2.55 + Math.sin(t * 1.5) * 0.06, 0);
+  s6.ai.rotation.set((1 - eBack(ak, 1.4)) * -Math.PI, Math.sin(t * 0.8) * 0.15, 0);
+  s6.ai.scale.setScalar(s6.ab * Math.max(0.001, eOut(ak)));
+  s6.aiGlow.material.opacity = 0.5 * eOut(ak);
+  s6.net.rotation.y = Math.sin(t * 0.35) * 0.35;
+  // camera: continues from scene 5's pose, settles, then pulls back hard into the light flare
+  const settle = eInOut(prog(t, 26.0, 1.6));
+  const p5 = s5camPos(26);
+  const back = eIn(prog(t, TR.flare[0], TR.flare[1] - TR.flare[0]));
+  s6.camera.position.set(lerp(p5.x, 0, settle), lerp(p5.y, 0.35, settle), lerp(p5.z, 8.6, settle) + back * 10);
+  s6.camera.lookAt(0, lerp(0.35, 0.45, settle), 0);
+  const fl = pulse(t, TR.flare[1], 0.22);
+  s6.flare.material.opacity = fl; s6.flare.scale.set(8 * fl + 0.01, 1.6 * fl + 0.01, 1);
+};
+
+// shared burst particles: plate → scatter → network (moved between scenes 5 and 6)
+const burst = (() => {
+  const N = s5.burstStart.length, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.055, map: softDot, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const dir = [], target = [];
+  for (let i = 0; i < N; i++) {
+    dir.push(new THREE.Vector3(rnd() - 0.5, rnd() * 0.9 - 0.2, rnd() - 0.5).normalize().multiplyScalar(0.8 + rnd() * 1.6));
+    let v;
+    if (i % 5 < 3) { const n = s6.nodes[i % s6.nodes.length]; v = n.clone().add(new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(0.22)); }
+    else { const [a, b] = s6.edges[i % s6.edges.length]; v = new THREE.Vector3().lerpVectors(s6.nodes[a], s6.nodes[b], rnd()); }
+    target.push(v);
+  }
+  return { pts, dir, target, N };
+})();
+// network-local point → world, following the net's own motion in scene 6
+const _w = new THREE.Vector3();
+function netToWorld(v, t) { const ry = Math.sin(t * 0.35) * 0.35; return _w.copy(v).applyAxisAngle(new THREE.Vector3(0, 1, 0), ry).setY(v.y + 0.1); }
+function updateBurst(t) {
+  const [a, b] = TR.parts;
+  burst.pts.visible = t >= a && t < b + 2.5;
+  if (!burst.pts.visible) return;
+  const k1 = eOut(prog(t, a, 0.8)), k2 = eInOut(prog(t, a + 0.75, 1.1));
+  const pa = burst.pts.geometry.attributes.position, ca = burst.pts.geometry.attributes.color;
+  const fadeOut = 1 - 0.75 * prog(t, b, 1.2);
+  for (let i = 0; i < burst.N; i++) {
+    const s = s5.burstStart[i], d = burst.dir[i], tg = netToWorld(burst.target[i], t);
+    const sw = Math.sin(t * 3 + i) * 0.08 * k1;
+    const ex = s.x + d.x * k1 + sw, ey = s.y + d.y * k1, ez = s.z + d.z * k1;
+    pa.setXYZ(i, lerp(ex, tg.x, k2), lerp(ey, tg.y, k2), lerp(ez, tg.z, k2));
+    const tw = (0.65 + 0.35 * Math.sin(t * 6 + i * 1.7)) * fadeOut;
+    ca.setXYZ(i, tw, tw * lerp(0.82, 0.75, k2), tw * lerp(0.5, 0.95, k2 * 0.6));
+  }
+  pa.needsUpdate = ca.needsUpdate = true;
+}
+
+// ================= Scene 7 — «Рахмет!» =================
+const s7 = makeWorld({ fog: 0.02 });
+{
+  s7.thanks = text3d('Рахмет!', { width: 3.3, depth: 0.45 }); s7.tb = s7.thanks.scale.x;
+  s7.name = text3d('Ернұр', { width: 1.7, depth: 0.25, mat: goldSoft }); s7.nb = s7.name.scale.x;
+  s7.glow = glowSprite(0xffc874, 6, 0.4); s7.glow.position.set(0, 0.6, -1.5);
+  s7.scene.add(s7.thanks, s7.name, s7.glow);
+}
+s7.update = (t) => {
+  const k = eOut(prog(t, 31.0, 1.0)), kn = eOut(prog(t, 31.5, 0.8));
+  s7.thanks.position.set(0, 0.85 + Math.sin(t * 1.2) * 0.05, 0);
+  s7.thanks.rotation.set(0, (1 - k) * 0.9 + Math.sin(t * 0.7) * 0.06, 0);
+  s7.thanks.scale.setScalar(s7.tb * lerp(1.6, 1, k));
+  s7.name.position.set(0, -0.2, 0.2); s7.name.scale.setScalar(s7.nb * Math.max(0.001, kn));
+  const dim = 1 - eInOut(prog(t, 33.2, 1.8));
+  s7.key.intensity = 3.0 * dim; s7.rim.intensity = 2.2 * dim; s7.amb.intensity = 0.5 * dim + 0.05; s7.glow.material.opacity = 0.4 * dim;
+  s7.camera.position.set(Math.sin(t * 0.5) * 0.2, 0.25, lerp(9.5, 8.0, eOut(prog(t, 31, 4))));
+  s7.camera.lookAt(0, 0.35, 0);
+};
+
+const SC = [s1, s2, s3, s4, s5, s6, s7];
+const sceneAt = (t) => { const i = SCENES.findIndex((s, j) => t >= s && t < SCENES[j + 1]); return i < 0 ? (t < 0 ? s1 : s7) : SC[i]; };
+function draw(sc, t, rt) { sc.update(t); renderer.setRenderTarget(rt); renderer.render(sc.scene, sc.camera); renderer.setRenderTarget(null); }
+
+// ---------- display rigs for the transitions ----------
+const quadMat = (rt) => new THREE.MeshBasicMaterial({ map: rt.texture, toneMapped: false });
+const quadA = new THREE.Mesh(new THREE.PlaneGeometry(QW, QH), quadMat(rtA));
+const quadB = new THREE.Mesh(new THREE.PlaneGeometry(QW, QH), quadMat(rtB));
+const edgeMat = new THREE.MeshStandardMaterial({ color: 0x0b1430, emissive: 0x111c40, metalness: 0.5, roughness: 0.4 });
+const cube = new THREE.Mesh(new THREE.BoxGeometry(QW, QH, QW), [quadMat(rtB), edgeMat, edgeMat, edgeMat, quadMat(rtA), edgeMat]);
+const flip = new THREE.Group();
+{ const f = new THREE.Mesh(new THREE.PlaneGeometry(QW, QH), quadMat(rtA)); const b = new THREE.Mesh(new THREE.PlaneGeometry(QW, QH), quadMat(rtB)); b.rotation.y = Math.PI; flip.add(f, b); }
+const pageGeo = new THREE.PlaneGeometry(QW, QH, 90, 40);
+const pageBase = pageGeo.attributes.position.array.slice();
+pageGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pageGeo.attributes.position.count * 3).fill(1), 3));
+const page = new THREE.Group();
+page.add(new THREE.Mesh(pageGeo, new THREE.MeshBasicMaterial({ map: rtA.texture, toneMapped: false, vertexColors: true, side: THREE.FrontSide })));
+page.add(new THREE.Mesh(pageGeo, new THREE.MeshBasicMaterial({ color: 0x9a8a6a, vertexColors: true, side: THREE.BackSide, toneMapped: false })));
+display.add(new THREE.HemisphereLight(0xffe0b0, 0x203060, 2.0));
+const rigs = [quadA, quadB, cube, flip, page];
+rigs.forEach((r) => display.add(r));
+function show(...vis) { rigs.forEach((r) => { r.visible = vis.includes(r); }); }
+function curlPage(k) {
+  // page curl along a diagonal: the fold line sweeps from the right edge past the left edge
+  const R = 0.45, ang = 0.32, ca = Math.cos(ang), sa = Math.sin(ang);
+  const span = QW * ca + QH * sa;
+  const c = lerp(span / 2 + 0.1, -span / 2 - Math.PI * R - 0.2, k);
+  const p = pageGeo.attributes.position, col = pageGeo.attributes.color;
+  for (let i = 0; i < p.count; i++) {
+    const x = pageBase[i * 3], y = pageBase[i * 3 + 1];
+    const u = x * ca + y * sa, v = -x * sa + y * ca;
+    let nu = u, z = 0, shade = 1;
+    if (u > c) { const th = (u - c) / R; if (th < Math.PI) { nu = c + R * Math.sin(th); z = R * (1 - Math.cos(th)); shade = 0.55 + 0.45 * Math.cos(th * 0.5); } else { nu = c - (u - c - Math.PI * R); z = 2 * R; shade = 0.8; } }
+    p.setXYZ(i, nu * ca - v * sa, nu * sa + v * ca, z);
+    col.setXYZ(i, shade, shade, shade);
+  }
+  p.needsUpdate = col.needsUpdate = true;
+}
+
+// ---------- subtitles ----------
+const KEYS = ['ассалау', 'ернұр', 'сегіз', 'қарағанды', 'бөкетов', 'университет', 'екінші', 'курс', 'кітап', 'домбыра', 'музыка', 'тамақ', 'керемет', 'күйеу', 'бала', 'жасанды', 'интеллект', 'рахмет'];
+const isKey = (w) => { const s = w.toLowerCase().replace(/[^\p{L}\d-]/gu, ''); return s === 'он' || KEYS.some((k) => s.startsWith(k)); };
+const chunks = [];
+voice.forEach((line, li) => {
+  let cur = [];
+  const flush = () => { if (cur.length) chunks.push({ words: cur, li }); cur = []; };
+  line.words.forEach((w) => {
+    const len = cur.reduce((n, x) => n + x.w.length + 1, 0) + w.w.length;
+    if (cur.length && (len > 24 || cur.length >= 3)) flush();
+    cur.push(w);
+  });
+  flush();
+});
+chunks.forEach((c, i) => {
+  c.start = c.words[0].t - 0.08;
+  const next = chunks[i + 1];
+  const lineEnd = voice[c.li].end + 0.35;
+  c.end = next && next.li === c.li ? next.words[0].t - 0.08 : lineEnd;
+  c.html = c.words.map((w) => (isKey(w.w) ? `<span class="k">${w.w}</span>` : w.w)).join(' ');
+});
+let lastChunk = null;
+function subtitles(t) {
+  const c = chunks.find((x) => t >= x.start && t < x.end);
+  const el = $('subs');
+  if (c !== lastChunk) { el.innerHTML = c ? `<div>${c.html}</div>` : ''; lastChunk = c; }
+  if (c) { const k = eOut(prog(t, c.start, 0.14)); el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * 18}px) scale(${0.94 + 0.06 * k})`; }
+}
+
+// ---------- frame ----------
+function render(t) {
+  dispCam.position.set(0, 0, 10); dispCam.rotation.set(0, 0, 0);
+  updateBurst(t);
+  const inT = ([a, b]) => t >= a && t < b;
+  const sc = sceneAt(t);
+  if (burst.pts.parent !== (t < 26 ? s5.scene : s6.scene)) (t < 26 ? s5.scene : s6.scene).add(burst.pts);
+  if (inT(TR.cube)) {
+    const k = eInOut(prog(t, ...[TR.cube[0], TR.cube[1] - TR.cube[0]]));
+    draw(s2, t, rtA); draw(s3, t, rtB);
+    show(cube); cube.position.set(0, 0, -QW / 2); cube.rotation.set(0, -k * Math.PI / 2, 0);
+    dispCam.position.z = 10 + Math.sin(Math.PI * k) * 5.5;
+  } else if (inT(TR.flip)) {
+    const k = eInOut(prog(t, TR.flip[0], TR.flip[1] - TR.flip[0]));
+    draw(s3, t, rtA); draw(s4, t, rtB);
+    show(flip); flip.rotation.set(Math.sin(Math.PI * k) * 0.12, k * Math.PI, 0); flip.position.set(0, 0, -Math.sin(Math.PI * k) * 4);
+  } else if (inT(TR.page)) {
+    const k = eInOut(prog(t, TR.page[0], TR.page[1] - TR.page[0]));
+    draw(s4, t, rtA); draw(s5, t, rtB);
+    show(page, quadB); quadB.position.z = -0.05; curlPage(k);
+  } else {
+    draw(sc, t, rtA); show(quadA); quadA.position.z = 0;
+  }
+  composer.render();
+
+  // overlays: gold flash at the zoom-through, light flare into the finale, fade out
+  $('flash').style.opacity = pulse(t, TR.through[1], 0.09) * 0.95;
+  $('flare').style.opacity = clamp(pulse(t, TR.flare[1], 0.16) * 1.15);
+  $('fade').style.opacity = Math.max(1 - prog(t, 0, 0.35), eInOut(prog(t, 34.2, 0.8)));
+  const ig = eOut(prog(t, 32.0, 0.6)) * (1 - eInOut(prog(t, 33.9, 1.0)) * 0.6);
+  $('igName').textContent = INSTAGRAM; $('ig').style.opacity = ig; $('ig').style.transform = `translateY(${(1 - eOut(prog(t, 32.0, 0.6))) * 30}px)`;
+  subtitles(t);
+}
+
+window.renderFrame = render;
+window.DURATION = DURATION;
+window.ready = true;
+
+function fit() { $('stage').style.transform = `scale(${Math.min(innerWidth / W, innerHeight / H)})`; }
+if (!new URLSearchParams(location.search).has('export')) {
+  fit(); addEventListener('resize', fit);
+  const audio = $('audio'), btn = $('play');
+  let t0 = null, withSound = false;
+  btn.hidden = false;
+  btn.onclick = () => { btn.hidden = true; withSound = true; audio.currentTime = 0; audio.play().catch(() => { withSound = false; }); };
+  const loop = (now) => { if (t0 === null) t0 = now; render(withSound ? audio.currentTime % DURATION : ((now - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+} else render(0);
+</script>
+</body>
+</html>

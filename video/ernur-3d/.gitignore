@@ -1,0 +1,5 @@
+work/node_modules/
+work/audio/
+work/_video.mp4
+work/_render.log
+work/package-lock.json
