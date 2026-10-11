@@ -39,7 +39,7 @@ if (arg('--stills')) {
     await page.screenshot({ path: path.join(out, `s-${t.toFixed(2)}.png`) });
   }
 } else {
-  const FPS = 30, from = Number(arg('--from') ?? 0), to = Number(arg('--to') ?? await page.evaluate(() => window.DURATION));
+  const FPS = Number(arg('--fps') ?? 60), from = Number(arg('--from') ?? 0), to = Number(arg('--to') ?? await page.evaluate(() => window.DURATION));
   const out = arg('--out') ?? path.join(here, '..', 'ernur-3d.mp4');
   const withAudio = !arg('--out');
   const ffArgs = ['-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'png', '-i', '-'];

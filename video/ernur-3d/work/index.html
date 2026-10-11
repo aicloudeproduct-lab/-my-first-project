@@ -56,12 +56,12 @@ import { TTFLoader } from 'three/addons/loaders/TTFLoader.js';
 import { Font } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { MeshSurfaceSampler } from 'three/addons/math/MeshSurfaceSampler.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 const INSTAGRAM = '@nickname';          // ← Instagram никнейміңізді осында жазыңыз
 const W = 1080, H = 1920, DURATION = 35;
@@ -88,8 +88,26 @@ renderer.setPixelRatio(1);
 renderer.setSize(W, H, false);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.92;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const pmrem = new THREE.PMREMGenerator(renderer);
-const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+// Reflection environment: a warm softbox (key), a top fill, a cool blue rim and a dark night floor,
+// so metal and ceramic reflect the same gold / night-blue light the scenes are lit with
+function warmNightEnv() {
+  const s = new THREE.Scene();
+  s.add(new THREE.Mesh(new THREE.SphereGeometry(20, 32, 16), new THREE.MeshBasicMaterial({ side: THREE.BackSide, color: 0x0a1430 })));
+  const panel = (c, k, pos, size) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(...size), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), side: THREE.DoubleSide }));
+    m.position.set(...pos); m.lookAt(0, 0, 0); s.add(m);
+  };
+  panel(0xffc070, 9, [6, 5, 6], [8, 6]);
+  panel(0xffd9a0, 2.4, [0, 1.5, 9], [12, 7]);   // warm wall behind the camera: what front faces reflect
+  panel(0xffe2b0, 2.5, [-2, 8, 2], [8, 3]);
+  panel(0x3a66ff, 3, [-7, 1, -4], [5, 7]);
+  panel(0x1a2a55, 1, [0, -6, 0], [20, 20]);
+  return pmrem.fromScene(s, 0.03).texture;
+}
+const envTex = warmNightEnv();
 const rtOpts = { type: THREE.HalfFloatType, samples: 4 };
 const rtA = new THREE.WebGLRenderTarget(W, H, rtOpts);
 const rtB = new THREE.WebGLRenderTarget(W, H, rtOpts);
@@ -105,6 +123,20 @@ composer.addPass(new RenderPass(display, dispCam));
 const bloom = new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), 0.42, 0.55, 0.92);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+const film = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime; varying vec2 vUv;
+    float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + uTime * 7.13) * 43758.5453); }
+    void main() {
+      vec2 c = vUv - 0.5; float r = dot(c, c); vec2 off = c * r * 0.012;
+      vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
+      col *= 1.0 - smoothstep(0.12, 0.62, r) * 0.5;
+      col += (h(floor(vUv * vec2(1080.0, 1920.0))) - 0.5) * 0.03;
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+composer.addPass(film);
 
 // ---------- shared assets ----------
 const voice = await (await fetch('voice.json')).json();
@@ -114,9 +146,9 @@ const ttf = new TTFLoader(); ttf.reversed = true;
 const font = new Font(await new Promise((res) => ttf.load('fonts/InterDisplay-Black.otf', res)));
 await document.fonts.load('200px "Noto Color Emoji"').catch(() => {});
 
-const gold = new THREE.MeshStandardMaterial({ color: 0xf2b84b, metalness: 0.9, roughness: 0.26, envMapIntensity: 1.2 });
-const goldSoft = new THREE.MeshStandardMaterial({ color: 0xffd98a, metalness: 0.75, roughness: 0.32 });
-const navy = new THREE.MeshStandardMaterial({ color: 0x14224a, metalness: 0.3, roughness: 0.45 });
+const gold = new THREE.MeshPhysicalMaterial({ color: 0xf3c25e, metalness: 1, roughness: 0.22, clearcoat: 0.35, clearcoatRoughness: 0.15, envMapIntensity: 1.15 });
+const goldSoft = new THREE.MeshPhysicalMaterial({ color: 0xf5d08a, metalness: 0.95, roughness: 0.3, clearcoat: 0.2, envMapIntensity: 1.0 });
+const navy = new THREE.MeshPhysicalMaterial({ color: 0x0f1a3a, metalness: 0.2, roughness: 0.45, clearcoat: 0.12, clearcoatRoughness: 0.3 });
 const navyDeep = new THREE.MeshStandardMaterial({ color: 0x0b1430, metalness: 0.2, roughness: 0.6 });
 
 function text3d(str, { width, size = 1, depth = 0.25, mat = gold, bevel = true } = {}) {
@@ -158,6 +190,8 @@ function makeWorld({ fog = 0.03 } = {}) {
   scene.fog = new THREE.FogExp2(0x070e24, fog);
   const amb = new THREE.AmbientLight(0x3a4f8f, 0.55); scene.add(amb);
   const key = new THREE.DirectionalLight(0xffc874, 3.0); key.position.set(3, 4, 6); scene.add(key);
+  key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+  Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 0.5, far: 30 });
   const rim = new THREE.DirectionalLight(0x4a7dff, 2.2); rim.position.set(-4, 2, -5); scene.add(rim);
   const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 200);
   // floating dust for depth / parallax
@@ -172,6 +206,20 @@ function makeWorld({ fog = 0.03 } = {}) {
     opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
   scene.add(dust);
   return { scene, camera, amb, key, rim, dust };
+}
+function shadowFloor(y, size = 14, opacity = 0.4) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.ShadowMaterial({ opacity, color: 0x000814 }));
+  m.rotation.x = -Math.PI / 2; m.position.y = y; m.receiveShadow = true; m.userData.noCast = true; return m;
+}
+function woodTex(base = '#a86a2c', dark = '#6e3f17', w = 512, h = 1024, rings = 46) {
+  return canvasTex(w, h, (g) => {
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < rings; i++) {
+      const x0 = rnd() * w; g.strokeStyle = dark; g.globalAlpha = 0.12 + rnd() * 0.25; g.lineWidth = 1 + rnd() * 4;
+      g.beginPath(); for (let y = 0; y <= h; y += 16) g.lineTo(x0 + Math.sin(y * 0.012 + i) * 10 + Math.sin(y * 0.05 + i * 3) * 3, y); g.stroke();
+    }
+    g.globalAlpha = 1;
+  });
 }
 function glowSprite(color, scale, opacity = 1) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDot, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -194,25 +242,30 @@ function roundCard(w, h, d, tex, frameMat = gold) {
 
 // ---------- illustrations (used when no photo is given) ----------
 function portraitIllustration() {
+  // placeholder in a studio-portrait style: rim-lit silhouette on a night-blue backdrop with bokeh
   return canvasTex(720, 940, (g, w, h) => {
-    const bg = g.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#1d3270'); bg.addColorStop(1, '#0a132e');
+    const bg = g.createRadialGradient(w * 0.62, h * 0.32, 10, w * 0.5, h * 0.5, h * 0.75);
+    bg.addColorStop(0, '#2b3f7a'); bg.addColorStop(0.5, '#121c3d'); bg.addColorStop(1, '#060b1a');
     g.fillStyle = bg; g.fillRect(0, 0, w, h);
-    const halo = g.createRadialGradient(w / 2, h * 0.38, 20, w / 2, h * 0.38, w * 0.6);
-    halo.addColorStop(0, 'rgba(255,210,130,.55)'); halo.addColorStop(1, 'rgba(255,210,130,0)'); g.fillStyle = halo; g.fillRect(0, 0, w, h);
-    // shoulders
-    const sh = g.createLinearGradient(0, h * 0.62, 0, h); sh.addColorStop(0, '#f2b84b'); sh.addColorStop(1, '#a8701f');
-    g.fillStyle = sh; g.beginPath(); g.ellipse(w / 2, h * 1.02, w * 0.46, h * 0.36, 0, Math.PI, 0); g.fill();
-    // neck + head
-    const skin = g.createLinearGradient(w * 0.3, 0, w * 0.7, 0); skin.addColorStop(0, '#e9b98c'); skin.addColorStop(1, '#c98f62');
-    g.fillStyle = skin; g.fillRect(w * 0.43, h * 0.5, w * 0.14, h * 0.14);
-    g.beginPath(); g.ellipse(w / 2, h * 0.4, w * 0.2, h * 0.17, 0, 0, Math.PI * 2); g.fill();
-    // hair
-    g.fillStyle = '#1b130e'; g.beginPath(); g.ellipse(w / 2, h * 0.3, w * 0.215, h * 0.1, 0, Math.PI, 0); g.fill();
-    g.beginPath(); g.ellipse(w * 0.5, h * 0.29, w * 0.2, h * 0.07, -0.1, 0, Math.PI); g.fill();
-    // smile + eyes
-    g.fillStyle = '#2a1a12'; g.beginPath(); g.ellipse(w * 0.43, h * 0.41, 10, 7, 0, 0, Math.PI * 2); g.ellipse(w * 0.57, h * 0.41, 10, 7, 0, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = '#7a3a24'; g.lineWidth = 7; g.lineCap = 'round'; g.beginPath(); g.arc(w / 2, h * 0.445, w * 0.07, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
-    g.font = '900 64px "Inter Display", sans-serif'; g.fillStyle = '#ffd98a'; g.textAlign = 'center'; g.fillText('ЕРНҰР', w / 2, h * 0.93);
+    for (let i = 0; i < 26; i++) {
+      const x = rnd() * w, y = rnd() * h * 0.7, r = 10 + rnd() * 34;
+      const b = g.createRadialGradient(x, y, 0, x, y, r); const warm = rnd() < 0.6;
+      b.addColorStop(0, warm ? 'rgba(255,200,120,.35)' : 'rgba(120,150,255,.3)'); b.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = b; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
+    const fig = new Path2D();
+    fig.ellipse(w * 0.5, h * 0.38, w * 0.155, h * 0.135, 0, 0, Math.PI * 2);
+    fig.moveTo(w * 0.42, h * 0.5); fig.lineTo(w * 0.58, h * 0.5); fig.lineTo(w * 0.6, h * 0.6);
+    fig.bezierCurveTo(w * 0.86, h * 0.64, w * 0.98, h * 0.74, w * 1.02, h * 1.0); fig.lineTo(-w * 0.02, h * 1.0);
+    fig.bezierCurveTo(w * 0.02, h * 0.74, w * 0.14, h * 0.64, w * 0.4, h * 0.6); fig.closePath();
+    g.save(); g.shadowColor = 'rgba(255,196,110,.95)'; g.shadowBlur = 38; g.fillStyle = '#0a0f1f'; g.fill(fig); g.restore();
+    g.save(); g.clip(fig);
+    const key = g.createLinearGradient(w * 0.9, 0, w * 0.3, 0); key.addColorStop(0, 'rgba(255,190,110,.55)'); key.addColorStop(0.45, 'rgba(255,190,110,.08)'); key.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = key; g.fillRect(0, 0, w, h);
+    const rimL = g.createLinearGradient(0, 0, w * 0.45, 0); rimL.addColorStop(0, 'rgba(110,150,255,.45)'); rimL.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rimL; g.fillRect(0, 0, w, h); g.restore();
+    g.lineWidth = 4; g.strokeStyle = 'rgba(255,214,150,.75)'; g.stroke(fig);
+    g.font = '900 60px "Inter Display", sans-serif'; g.fillStyle = '#ffd98a'; g.textAlign = 'center'; g.fillText('ЕРНҰР', w / 2, h * 0.93);
   });
 }
 function universityIllustration() {
@@ -232,8 +285,35 @@ function universityIllustration() {
     g.fillText('Бөкетов университеті', w / 2, h * 0.975);
   });
 }
+function universityModel() {
+  // a stone campus building on a floating diorama base — warm windows, columned portico, steps
+  const g = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial({ color: 0xe2d6c0, roughness: 0.72, metalness: 0.02 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0xcbb994, roughness: 0.6 });
+  const base = new THREE.Mesh(new RoundedBoxGeometry(2.4, 0.16, 1.3, 3, 0.05), navy); base.position.y = -0.08; g.add(base);
+  const grass = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.02, 1.2), new THREE.MeshStandardMaterial({ color: 0x2c4a2a, roughness: 0.9 })); grass.position.y = 0.01; g.add(grass);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.62, 0.62), stone); body.position.set(0, 0.36, -0.12); g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 0.7), trim); roof.position.set(0, 0.7, -0.12); g.add(roof);
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x2a1c0c, emissive: 0xffb860, emissiveIntensity: 1.3, roughness: 0.3 });
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 8; c++) {
+    if (c >= 3 && c <= 4) continue;
+    const wdw = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.15), winMat); wdw.position.set(-0.8 + c * 0.229, 0.24 + r * 0.24, 0.191); g.add(wdw);
+  }
+  for (let i = 0; i < 3; i++) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.85 + i * 0.12, 0.035, 0.12), trim); st.position.set(0, 0.035 * (2 - i) + 0.02, 0.36 + i * 0.07); g.add(st); }
+  const podium = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.06, 0.32), stone); podium.position.set(0, 0.1, 0.27); g.add(podium);
+  for (let i = 0; i < 6; i++) { const col = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.036, 0.5, 16), stone); col.position.set(-0.36 + i * 0.144, 0.38, 0.36); g.add(col); }
+  const ent = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.08, 0.34), trim); ent.position.set(0, 0.67, 0.27); g.add(ent);
+  const tri = new THREE.Shape([new THREE.Vector2(-0.48, 0), new THREE.Vector2(0.48, 0), new THREE.Vector2(0, 0.24)]);
+  const ped = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 0.32, bevelEnabled: false }), stone); ped.position.set(0, 0.71, 0.11); g.add(ped);
+  const emblem = new THREE.Mesh(new THREE.CircleGeometry(0.045, 24), gold); emblem.position.set(0, 0.79, 0.432); g.add(emblem);
+  for (const x of [-1.0, 1.0]) for (const z of [0.42, -0.45]) {
+    const tr = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 10), new THREE.MeshStandardMaterial({ color: 0x24402a, roughness: 0.8 })); tr.position.set(x, 0.17, z); g.add(tr);
+  }
+  const lab = text3d('Бөкетов университеті', { width: 2.1, depth: 0.04, mat: goldSoft, bevel: false }); lab.position.set(0, -0.32, 0.55); g.add(lab);
+  g.scale.setScalar(0.8); const wrap = new THREE.Group(); wrap.add(g); return wrap;
+}
 const portraitTex = await photoOr('photos/ernur.jpg', portraitIllustration);
-const uniTex = await photoOr('photos/university.jpg', universityIllustration);
+const uniTex = await photoOr('photos/university.jpg', () => null);   // no photo → 3D building
 
 // ================= Scene 1 — «Ассалаумағалейкум!» / Ернұр =================
 const s1 = makeWorld({ fog: 0.02 });
@@ -328,7 +408,7 @@ const s3 = makeWorld({ fog: 0.025 });
   s3.ring = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.13, 48), new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   s3.ring.position.set(kx, ky, 0.2); s3.map.add(s3.ring);
   s3.label = text3d('Қарағанды', { width: 1.25, depth: 0.06, mat: goldSoft, bevel: false }); s3.scene.add(s3.label);
-  s3.uni = roundCard(2.1, 1.45, 0.08, uniTex); s3.scene.add(s3.uni);
+  s3.uni = uniTex ? roundCard(2.1, 1.45, 0.08, uniTex) : universityModel(); s3.scene.add(s3.uni);
   s3.badge = new THREE.Group();
   const pill = new THREE.Mesh(new RoundedBoxGeometry(1.35, 0.55, 0.16, 4, 0.2), navy);
   const bt = text3d('2-курс', { width: 1.0, depth: 0.12 }); bt.position.z = 0.1;
@@ -350,11 +430,11 @@ s3.update = (t) => {
   s3.label.scale.setScalar(s3.label.userData.b ?? (s3.label.userData.b = s3.label.scale.x));
   s3.label.scale.multiplyScalar(Math.max(0.001, lk));
   const u = eBack(prog(t, word(2, 3) - 0.1, 0.9), 1.3);
-  s3.uni.position.set(lerp(pinWorld.x, -0.3, eOut(prog(t, word(2, 3) - 0.1, 0.9))), lerp(pinWorld.y, 2.05, u) + Math.sin(t * 1.3) * 0.05, lerp(pinWorld.z, 0.6, u));
-  s3.uni.rotation.set(0.05, 0.12 + Math.sin(t * 0.7) * 0.05, -0.03);
+  s3.uni.position.set(lerp(pinWorld.x, uniTex ? -0.3 : -0.2, eOut(prog(t, word(2, 3) - 0.1, 0.9))), lerp(pinWorld.y, uniTex ? 2.05 : 1.55, u) + Math.sin(t * 1.3) * 0.05, lerp(pinWorld.z, 0.6, u));
+  s3.uni.rotation.set(uniTex ? 0.05 : 0.22, (uniTex ? 0.12 : -0.42) + Math.sin(t * 0.7) * 0.06, -0.03);
   s3.uni.scale.setScalar(Math.max(0.001, u));
   const b = eElastic(prog(t, word(2, 5) - 0.1, 1.0));
-  s3.badge.position.set(1.05, 1.2 + Math.sin(t * 1.6) * 0.05, 1.3);
+  s3.badge.position.set(0.72, 0.72 + Math.sin(t * 1.6) * 0.05, 1.7);
   s3.badge.rotation.set(0, -0.25 + (1 - clamp(b)) * 1.5, 0.05);
   s3.badge.scale.setScalar(Math.max(0.001, b));
   // camera: dolly in and drift toward Karaganda after the pin lands
@@ -366,8 +446,8 @@ s3.update = (t) => {
 // ================= Scene 4 — book, dombra, headphones carousel =================
 function bookModel() {
   const g = new THREE.Group();
-  const cover = new THREE.Mesh(new RoundedBoxGeometry(0.95, 1.2, 0.2, 3, 0.03), new THREE.MeshStandardMaterial({ color: 0x8a2b1e, roughness: 0.5, metalness: 0.1 }));
-  const pages = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.12, 0.16), new THREE.MeshStandardMaterial({ color: 0xf3e9d2, roughness: 0.8 }));
+  const cover = new THREE.Mesh(new RoundedBoxGeometry(0.95, 1.2, 0.2, 3, 0.03), new THREE.MeshPhysicalMaterial({ map: woodTex('#7c2418', '#4d130b', 256, 256, 120), roughness: 0.62, sheen: 0.4, sheenColor: 0xffc0a0 }));
+  const pages = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.12, 0.16), new THREE.MeshStandardMaterial({ map: canvasTex(64, 256, (c, w, h) => { c.fillStyle = '#efe4cb'; c.fillRect(0, 0, w, h); for (let x = 0; x < w; x += 2) { c.fillStyle = `rgba(120,95,60,${0.08 + rnd() * 0.12})`; c.fillRect(x, 0, 1, h); } }), roughness: 0.85 }));
   pages.position.x = 0.04;
   const band = new THREE.Mesh(new THREE.BoxGeometry(0.97, 0.08, 0.21), gold); band.position.y = 0.38;
   const band2 = band.clone(); band2.position.y = -0.38;
@@ -375,7 +455,7 @@ function bookModel() {
 }
 function dombraModel() {
   const g = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: 0xb5793a, roughness: 0.42, metalness: 0.05 });
+  const wood = new THREE.MeshPhysicalMaterial({ map: woodTex(), roughness: 0.38, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.25 });
   const pts = []; for (let i = 0; i <= 24; i++) { const a = i / 24; pts.push(new THREE.Vector2(Math.sin(Math.PI * a) * (0.38 - 0.12 * a) + 0.001, -a * 0.95)); }
   const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 48), wood); body.scale.z = 0.45; body.position.y = 0.05;
   const top = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshStandardMaterial({ color: 0xd9a462, roughness: 0.5 }));
@@ -427,7 +507,7 @@ s4.update = (t) => {
     const on = i === active ? eOut(prog(t, (i === 0 ? 14.6 : s4.times[i] - 0.2), 0.4)) : 0;
     c.holder.scale.setScalar(1 + 0.08 * on);
     c.glow.material.opacity = 0.55 * on;
-    c.card.material.emissive = new THREE.Color(0x2a3f86).multiplyScalar(0.35 + 0.65 * on);
+    c.card.material.emissive = new THREE.Color(0x2a3f86).multiplyScalar(0.08 + 0.3 * on);
     c.model.rotation.y = Math.sin(t * 1.2 + i) * 0.5 + (i === 0 ? 0.4 : 0);
     c.model.rotation.x = Math.sin(t * 0.9 + i) * 0.12;
   });
@@ -440,12 +520,14 @@ const s5 = makeWorld();
 {
   s5.plate = new THREE.Group(); s5.plate.position.set(0, -0.7, 0); s5.scene.add(s5.plate);
   const prof = [[0, 0], [1.0, 0], [1.2, 0.07], [1.42, 0.2], [1.5, 0.23]].map(([x, y]) => new THREE.Vector2(x, y));
-  const plateMesh = new THREE.Mesh(new THREE.LatheGeometry(prof, 64), new THREE.MeshStandardMaterial({ color: 0x8f8a80, roughness: 0.6, metalness: 0.05, envMapIntensity: 0.35, side: THREE.DoubleSide }));
+  const plateMesh = new THREE.Mesh(new THREE.LatheGeometry(prof, 64), new THREE.MeshPhysicalMaterial({ color: 0xa9a297, roughness: 0.35, clearcoat: 0.9, clearcoatRoughness: 0.12, envMapIntensity: 0.45, side: THREE.DoubleSide }));
   const rim = new THREE.Mesh(new THREE.TorusGeometry(1.48, 0.025, 12, 64), gold); rim.rotation.x = Math.PI / 2; rim.position.y = 0.225;
   s5.plate.add(plateMesh, rim);
+  const table = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), new THREE.MeshStandardMaterial({ map: woodTex('#3a2414', '#1f120a', 1024, 1024, 160), roughness: 0.55 }));
+  table.rotation.x = -Math.PI / 2; table.rotation.z = 0.3; table.position.y = -0.705; table.receiveShadow = true; table.userData.noCast = true; s5.scene.add(table);
   s5.food = new THREE.Group(); s5.plate.add(s5.food);
   const dough = new THREE.MeshStandardMaterial({ color: 0xf2e2bd, roughness: 0.55 });
-  const meat = new THREE.MeshStandardMaterial({ color: 0x7a3f22, roughness: 0.6 });
+  const meat = new THREE.MeshPhysicalMaterial({ color: 0x6e3418, roughness: 0.45, clearcoat: 0.5, clearcoatRoughness: 0.3 });
   const onion = new THREE.MeshStandardMaterial({ color: 0xf4ead2, roughness: 0.4, transparent: true, opacity: 0.95 });
   for (let i = 0; i < 16; i++) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.025, 0.34), dough);
@@ -488,8 +570,8 @@ s5.update = (t) => {
   s5.steam.forEach((p) => {
     const k = ((t * p.sp + p.ph) % 1);
     p.s.position.set(p.x * (1 + k * 0.6) + Math.sin(t * 2 + p.ph * 9) * 0.12 * k, -0.45 + k * 2.4, p.z);
-    p.s.scale.setScalar(0.25 + k * 0.6);
-    p.s.material.opacity = Math.sin(Math.PI * k) * 0.1 * (1 - gone);
+    p.s.scale.set(0.16 + k * 0.35, 0.35 + k * 0.8, 1);
+    p.s.material.opacity = Math.sin(Math.PI * k) * 0.08 * (1 - gone);
   });
   // «Күйеу бала керек пе? 😉» jumps in on «күйеу»
   const tk = word(5, 0) - 0.08;
@@ -622,7 +704,16 @@ s7.update = (t) => {
   s7.camera.lookAt(0, 0.35, 0);
 };
 
+s2.scene.add(shadowFloor(-2.25, 14, 0.35));
+s4.scene.add(shadowFloor(-1.0, 14, 0.4));
+s7.scene.add(shadowFloor(-1.05, 14, 0.3));
 const SC = [s1, s2, s3, s4, s5, s6, s7];
+SC.forEach((sc) => sc.scene.traverse((o) => {
+  if (!o.isMesh || o.userData.noCast) return;
+  const m = Array.isArray(o.material) ? o.material[0] : o.material;
+  if (m.isMeshBasicMaterial || m.blending === THREE.AdditiveBlending) return;
+  o.castShadow = true; o.receiveShadow = true;
+}));
 const sceneAt = (t) => { const i = SCENES.findIndex((s, j) => t >= s && t < SCENES[j + 1]); return i < 0 ? (t < 0 ? s1 : s7) : SC[i]; };
 function draw(sc, t, rt) { sc.update(t); renderer.setRenderTarget(rt); renderer.render(sc.scene, sc.camera); renderer.setRenderTarget(null); }
 
@@ -713,6 +804,7 @@ function render(t) {
   } else {
     draw(sc, t, rtA); show(quadA); quadA.position.z = 0;
   }
+  film.uniforms.uTime.value = t;
   composer.render();
 
   // overlays: gold flash at the zoom-through, light flare into the finale, fade out
